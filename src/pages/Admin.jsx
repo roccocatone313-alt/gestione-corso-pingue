@@ -121,6 +121,17 @@ export default function Admin() {
   }
 
   async function cambiaStato(tipo, id, campo, valore) {
+    // A2: conferma per i cambi che generano movimenti contabili
+    let messaggioConferma = null
+    if (tipo === 'acquisti' && valore === 'Pagato') {
+      messaggioConferma = 'Impostare come "Pagato" creerà automaticamente un movimento Uscita. Confermi?'
+    } else if (tipo === 'sponsor' && valore === 'Incassato') {
+      messaggioConferma = 'Impostare come "Incassato" creerà automaticamente un movimento Entrata. Confermi?'
+    } else if (tipo === 'scadenze' && valore === 'Completata') {
+      messaggioConferma = 'Impostare come "Completata" creerà automaticamente un movimento contabile (se il tipo è Pagamento, Incasso o Rimborso). Confermi?'
+    }
+    if (messaggioConferma && !confirm(messaggioConferma)) return
+
     const { error } = await supabase.from(tipo).update({ [campo]: valore }).eq('id', id)
     if (error) { mostraMsg('errore', error.message); return }
     caricaTutto()

@@ -103,9 +103,10 @@ export default function Inserisci() {
     if (error) { mostraMsg('errore', error.message); return }
     mostraMsg('ok', 'Sponsor registrato.')
     setSp({
+      ...sp,
       nome: '', referente: '', email: '', telefono: '',
       importo_promesso: '', importo_incassato: '',
-      stato: 'Prospect', data_accordo: '', data_incasso: '', note: '',
+      data_accordo: '', data_incasso: '', note: '',
     })
   }
 
@@ -142,10 +143,10 @@ export default function Inserisci() {
     if (error) { mostraMsg('errore', error.message); return }
     mostraMsg('ok', 'Acquisto registrato.')
     setAc({
-      data_richiesta: oggi(), richiedente: '', descrizione: '', fornitore: '',
-      categoria: 'Materiale',
+      ...ac,
+      richiedente: '', descrizione: '', fornitore: '',
       importo_previsto: '', importo_effettivo: '',
-      stato: 'Da approvare', data_ordine: '', data_pagamento: '', note: '',
+      data_ordine: '', data_pagamento: '', note: '',
     })
   }
 
@@ -175,9 +176,8 @@ export default function Inserisci() {
     if (error) { mostraMsg('errore', error.message); return }
     mostraMsg('ok', 'Scadenza registrata.')
     setSc({
-      data: oggi(), tipo: 'Pagamento', descrizione: '',
-      categoria: 'Altro',
-      importo: '', responsabile: '', stato: 'Da fare', note: '',
+      ...sc,
+      descrizione: '', importo: '', responsabile: '', note: '',
     })
   }
 
@@ -202,7 +202,7 @@ export default function Inserisci() {
     setInvio(false)
     if (error) { mostraMsg('errore', error.message); return }
     mostraMsg('ok', 'Voce di budget registrata.')
-    setBud({ voce: '', categoria: 'Materiale', preventivato: '', note: '' })
+    setBud({ ...bud, voce: '', preventivato: '', note: '' })
   }
 
   return (
