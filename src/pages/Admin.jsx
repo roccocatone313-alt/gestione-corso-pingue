@@ -18,7 +18,7 @@ const TIPI_SCADENZA  = ['Pagamento','Incasso','Contratto','Rinnovo','Rimborso','
 const STATI_SCADENZA = ['Da fare','In corso','Completata','Annullata']
 
 const inputClass =
-  'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500'
+  'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500'
 
 function euro(n) {
   return '€ ' + Number(n || 0).toLocaleString('it-IT', {
@@ -61,6 +61,16 @@ function badge(stato) {
   )
 }
 
+// Etichetta leggibile dell'origine
+function etichettaOrigine(origine) {
+  switch (origine) {
+    case 'acquisto': return 'Acquisto'
+    case 'sponsor':  return 'Sponsor'
+    case 'scadenza': return 'Scadenza'
+    default:         return null
+  }
+}
+
 export default function Admin() {
   const [tab, setTab] = useState('movimenti')
   const [loading, setLoading] = useState(true)
@@ -75,7 +85,7 @@ export default function Admin() {
   const [filtro, setFiltro] = useState('')
   const [filtroStato, setFiltroStato] = useState('')
 
-  const [modal, setModal] = useState(null) // { tipo, dati }
+  const [modal, setModal] = useState(null)
   const [salvando, setSalvando] = useState(false)
 
   function mostraMsg(stato, testo) {
@@ -103,9 +113,6 @@ export default function Admin() {
   useEffect(() => { caricaTutto() }, [])
   useEffect(() => { setFiltro(''); setFiltroStato('') }, [tab])
 
-  // ============================================
-  // Elimina
-  // ============================================
   async function elimina(tipo, id) {
     if (!confirm('Eliminare questa voce? Operazione irreversibile.')) return
     const { error } = await supabase.from(tipo).delete().eq('id', id)
@@ -114,18 +121,12 @@ export default function Admin() {
     caricaTutto()
   }
 
-  // ============================================
-  // Cambio stato rapido
-  // ============================================
   async function cambiaStato(tipo, id, campo, valore) {
     const { error } = await supabase.from(tipo).update({ [campo]: valore }).eq('id', id)
     if (error) { mostraMsg('errore', error.message); return }
     caricaTutto()
   }
 
-  // ============================================
-  // Salva modifica dal modal
-  // ============================================
   async function salvaModifica() {
     if (!modal) return
     setSalvando(true)
@@ -134,8 +135,8 @@ export default function Admin() {
     const payload = { ...dati }
     delete payload.id
     delete payload.created_at
+    delete payload.origine  // non modificabile
 
-    // normalizza numerici vuoti a null
     Object.keys(payload).forEach(k => {
       if (payload[k] === '') payload[k] = null
     })
@@ -152,9 +153,6 @@ export default function Admin() {
     setModal(m => ({ ...m, dati: { ...m.dati, [campo]: valore } }))
   }
 
-  // ============================================
-  // Filtri
-  // ============================================
   function filtraLista(lista, campiRicerca) {
     let out = lista
     if (filtroStato) {
@@ -177,7 +175,7 @@ export default function Admin() {
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`flex-1 min-w-[90px] px-3 py-2 rounded-lg text-sm font-semibold transition ${
-              tab === t.id ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+              tab === t.id ? 'bg-sky-500 text-white' : 'text-sky-800 hover:bg-sky-50'
             }`}
           >
             {t.label}
@@ -219,9 +217,9 @@ export default function Admin() {
           <div className="text-center text-gray-400 italic py-8">Caricamento...</div>
         ) : (
           <>
-            {/* ============ MOVIMENTI ============ */}
+            {/* MOVIMENTI */}
             {tab === 'movimenti' && (() => {
-              const lista = filtraLista(movimenti, ['descrizione', 'categoria', 'cellula'])
+              const lista = filtraLista(movimenti, ['descrizione', 'categoria', 'cellula', 'riferimento'])
               if (!lista.length) return <div className="text-center text-gray-400 italic py-8">Nessun movimento.</div>
               return (
                 <div className="overflow-x-auto">
@@ -233,40 +231,62 @@ export default function Admin() {
                         <th className="py-2 px-2">Tipo</th>
                         <th className="py-2 px-2">Categoria</th>
                         <th className="py-2 px-2">Descrizione</th>
+                        <th className="py-2 px-2">Origine</th>
                         <th className="py-2 px-2 text-right">Importo</th>
                         <th className="py-2 px-2"></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {lista.map(m => (
-                        <tr key={m.id} className="border-b border-gray-50 last:border-0">
-                          <td className="py-2 px-2 text-gray-400">#{m.id}</td>
-                          <td className="py-2 px-2">{m.data}</td>
-                          <td className="py-2 px-2">{m.tipo}</td>
-                          <td className="py-2 px-2">{m.categoria}</td>
-                          <td className="py-2 px-2">{m.descrizione || '—'}</td>
-                          <td className={`py-2 px-2 text-right font-medium ${
-                            m.tipo === 'Entrata' ? 'text-green-700' : 'text-red-700'
-                          }`}>{euro(m.importo)}</td>
-                          <td className="py-2 px-2 text-right whitespace-nowrap">
-                            <button onClick={() => setModal({ tipo: 'movimenti', dati: { ...m } })}
-                                    className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded mr-1 hover:bg-blue-200 font-semibold">
-                              Modifica
-                            </button>
-                            <button onClick={() => elimina('movimenti', m.id)}
-                                    className="text-xs px-2 py-1 bg-red-100 text-red-800 rounded hover:bg-red-200 font-semibold">
-                              Elimina
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {lista.map(m => {
+                        const isAuto = m.origine && m.origine !== 'manuale'
+                        const etichetta = etichettaOrigine(m.origine)
+                        return (
+                          <tr key={m.id} className="border-b border-gray-50 last:border-0">
+                            <td className="py-2 px-2 text-gray-400">#{m.id}</td>
+                            <td className="py-2 px-2">{m.data}</td>
+                            <td className="py-2 px-2">{m.tipo}</td>
+                            <td className="py-2 px-2">{m.categoria}</td>
+                            <td className="py-2 px-2">{m.descrizione || '—'}</td>
+                            <td className="py-2 px-2">
+                              {isAuto ? (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-800">
+                                  auto · {etichetta}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-400">manuale</span>
+                              )}
+                            </td>
+                            <td className={`py-2 px-2 text-right font-medium ${
+                              m.tipo === 'Entrata' ? 'text-green-700' : 'text-red-700'
+                            }`}>{euro(m.importo)}</td>
+                            <td className="py-2 px-2 text-right whitespace-nowrap">
+                              {isAuto ? (
+                                <span className="text-xs text-gray-500 italic" title="Questo movimento è generato automaticamente e non può essere modificato qui.">
+                                  🔒 Gestito da {etichetta}
+                                </span>
+                              ) : (
+                                <>
+                                  <button onClick={() => setModal({ tipo: 'movimenti', dati: { ...m } })}
+                                          className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded mr-1 hover:bg-blue-200 font-semibold">
+                                    Modifica
+                                  </button>
+                                  <button onClick={() => elimina('movimenti', m.id)}
+                                          className="text-xs px-2 py-1 bg-red-100 text-red-800 rounded hover:bg-red-200 font-semibold">
+                                    Elimina
+                                  </button>
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
               )
             })()}
 
-            {/* ============ SPONSOR ============ */}
+            {/* SPONSOR */}
             {tab === 'sponsor' && (() => {
               const lista = filtraLista(sponsor, ['nome', 'referente'])
               if (!lista.length) return <div className="text-center text-gray-400 italic py-8">Nessuno sponsor.</div>
@@ -317,7 +337,7 @@ export default function Admin() {
               )
             })()}
 
-            {/* ============ ACQUISTI ============ */}
+            {/* ACQUISTI */}
             {tab === 'acquisti' && (() => {
               const lista = filtraLista(acquisti, ['descrizione', 'fornitore'])
               if (!lista.length) return <div className="text-center text-gray-400 italic py-8">Nessun acquisto.</div>
@@ -370,7 +390,7 @@ export default function Admin() {
               )
             })()}
 
-            {/* ============ BUDGET ============ */}
+            {/* BUDGET */}
             {tab === 'budget' && (() => {
               const lista = filtraLista(budget, ['voce', 'categoria'])
               if (!lista.length) return <div className="text-center text-gray-400 italic py-8">Nessuna voce di budget.</div>
@@ -421,7 +441,7 @@ export default function Admin() {
               )
             })()}
 
-            {/* ============ SCADENZE ============ */}
+            {/* SCADENZE */}
             {tab === 'scadenze' && (() => {
               const lista = filtraLista(scadenze, ['descrizione', 'responsabile', 'tipo'])
               if (!lista.length) return <div className="text-center text-gray-400 italic py-8">Nessuna scadenza.</div>
@@ -493,7 +513,7 @@ export default function Admin() {
         )}
       </div>
 
-      {/* ============ MODAL DI MODIFICA ============ */}
+      {/* MODAL DI MODIFICA */}
       {modal && (
         <Modal
           titolo={
