@@ -112,6 +112,7 @@ export default function Inserisci() {
   // ACQUISTO
   const [ac, setAc] = useState({
     data_richiesta: oggi(), richiedente: '', descrizione: '', fornitore: '',
+    categoria: 'Materiale',
     importo_previsto: '', importo_effettivo: '',
     stato: 'Da approvare', data_ordine: '', data_pagamento: '', note: '',
   })
@@ -128,6 +129,7 @@ export default function Inserisci() {
       richiedente: ac.richiedente.trim() || 'web',
       descrizione: ac.descrizione.trim(),
       fornitore: ac.fornitore.trim(),
+      categoria: ac.categoria,
       importo_previsto: Number(ac.importo_previsto),
       importo_effettivo: ac.importo_effettivo ? Number(ac.importo_effettivo) : null,
       stato: ac.stato,
@@ -141,6 +143,7 @@ export default function Inserisci() {
     mostraMsg('ok', 'Acquisto registrato.')
     setAc({
       data_richiesta: oggi(), richiedente: '', descrizione: '', fornitore: '',
+      categoria: 'Materiale',
       importo_previsto: '', importo_effettivo: '',
       stato: 'Da approvare', data_ordine: '', data_pagamento: '', note: '',
     })
@@ -149,6 +152,7 @@ export default function Inserisci() {
   // SCADENZA
   const [sc, setSc] = useState({
     data: oggi(), tipo: 'Pagamento', descrizione: '',
+    categoria: 'Altro',
     importo: '', responsabile: '', stato: 'Da fare', note: '',
   })
 
@@ -160,6 +164,7 @@ export default function Inserisci() {
       data: sc.data,
       tipo: sc.tipo,
       descrizione: sc.descrizione.trim(),
+      categoria: sc.categoria,
       importo: sc.importo ? Number(sc.importo) : null,
       responsabile: sc.responsabile.trim(),
       stato: sc.stato,
@@ -171,6 +176,7 @@ export default function Inserisci() {
     mostraMsg('ok', 'Scadenza registrata.')
     setSc({
       data: oggi(), tipo: 'Pagamento', descrizione: '',
+      categoria: 'Altro',
       importo: '', responsabile: '', stato: 'Da fare', note: '',
     })
   }
@@ -380,9 +386,16 @@ export default function Inserisci() {
                    onChange={e => setAc({ ...ac, fornitore: e.target.value })}
                    className={inputClass} />
           </Field>
+          <Field label="Categoria">
+            <select value={ac.categoria}
+                    onChange={e => setAc({ ...ac, categoria: e.target.value })}
+                    className={inputClass}>
+              {CATEGORIE.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Importo previsto (€) *">
-              <input type="number" step="0.01" min="0" required value={ac.importo_previsto}
+              <input type="number" step="0.01" min="0.01" required value={ac.importo_previsto}
                      onChange={e => setAc({ ...ac, importo_previsto: e.target.value })}
                      className={inputClass} />
             </Field>
@@ -456,6 +469,13 @@ export default function Inserisci() {
                    placeholder="Es. saldo fornitore palloni"
                    className={inputClass} />
           </Field>
+          <Field label="Categoria">
+            <select value={sc.categoria}
+                    onChange={e => setSc({ ...sc, categoria: e.target.value })}
+                    className={inputClass}>
+              {CATEGORIE.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Importo (€)">
               <input type="number" step="0.01" min="0" value={sc.importo}
@@ -500,7 +520,7 @@ export default function Inserisci() {
             </select>
           </Field>
           <Field label="Preventivato (€) *">
-            <input type="number" step="0.01" min="0" required value={bud.preventivato}
+            <input type="number" step="0.01" min="0.01" required value={bud.preventivato}
                    onChange={e => setBud({ ...bud, preventivato: e.target.value })}
                    className={inputClass} />
           </Field>

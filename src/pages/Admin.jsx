@@ -61,7 +61,6 @@ function badge(stato) {
   )
 }
 
-// Etichetta leggibile dell'origine
 function etichettaOrigine(origine) {
   switch (origine) {
     case 'acquisto': return 'Acquisto'
@@ -135,7 +134,7 @@ export default function Admin() {
     const payload = { ...dati }
     delete payload.id
     delete payload.created_at
-    delete payload.origine  // non modificabile
+    delete payload.origine
 
     Object.keys(payload).forEach(k => {
       if (payload[k] === '') payload[k] = null
@@ -339,7 +338,7 @@ export default function Admin() {
 
             {/* ACQUISTI */}
             {tab === 'acquisti' && (() => {
-              const lista = filtraLista(acquisti, ['descrizione', 'fornitore'])
+              const lista = filtraLista(acquisti, ['descrizione', 'fornitore', 'categoria'])
               if (!lista.length) return <div className="text-center text-gray-400 italic py-8">Nessun acquisto.</div>
               return (
                 <div className="overflow-x-auto">
@@ -348,6 +347,7 @@ export default function Admin() {
                       <tr className="text-left text-xs uppercase text-gray-500 border-b border-gray-100">
                         <th className="py-2 px-2">Descrizione</th>
                         <th className="py-2 px-2">Fornitore</th>
+                        <th className="py-2 px-2">Categoria</th>
                         <th className="py-2 px-2 text-right">Previsto</th>
                         <th className="py-2 px-2 text-right">Effettivo</th>
                         <th className="py-2 px-2">Stato</th>
@@ -360,6 +360,13 @@ export default function Admin() {
                         <tr key={a.id} className="border-b border-gray-50 last:border-0">
                           <td className="py-2 px-2 font-medium">{a.descrizione}</td>
                           <td className="py-2 px-2">{a.fornitore || '—'}</td>
+                          <td className="py-2 px-2">
+                            {a.categoria ? (
+                              <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                                {a.categoria}
+                              </span>
+                            ) : '—'}
+                          </td>
                           <td className="py-2 px-2 text-right">{euro(a.importo_previsto)}</td>
                           <td className="py-2 px-2 text-right">
                             {a.importo_effettivo ? euro(a.importo_effettivo) : '—'}
@@ -443,7 +450,7 @@ export default function Admin() {
 
             {/* SCADENZE */}
             {tab === 'scadenze' && (() => {
-              const lista = filtraLista(scadenze, ['descrizione', 'responsabile', 'tipo'])
+              const lista = filtraLista(scadenze, ['descrizione', 'responsabile', 'tipo', 'categoria'])
               if (!lista.length) return <div className="text-center text-gray-400 italic py-8">Nessuna scadenza.</div>
               const oggi = new Date(); oggi.setHours(0, 0, 0, 0)
               return (
@@ -454,6 +461,7 @@ export default function Admin() {
                         <th className="py-2 px-2">Data</th>
                         <th className="py-2 px-2">Tipo</th>
                         <th className="py-2 px-2">Descrizione</th>
+                        <th className="py-2 px-2">Categoria</th>
                         <th className="py-2 px-2">Responsabile</th>
                         <th className="py-2 px-2 text-right">Importo</th>
                         <th className="py-2 px-2">Stato</th>
@@ -479,6 +487,13 @@ export default function Admin() {
                             </td>
                             <td className="py-2 px-2">{s.tipo}</td>
                             <td className="py-2 px-2">{s.descrizione}</td>
+                            <td className="py-2 px-2">
+                              {s.categoria ? (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                                  {s.categoria}
+                                </span>
+                              ) : '—'}
+                            </td>
                             <td className="py-2 px-2">{s.responsabile || '—'}</td>
                             <td className="py-2 px-2 text-right">
                               {s.importo ? euro(s.importo) : '—'}
@@ -644,6 +659,12 @@ export default function Admin() {
                 <input type="text" value={modal.dati.fornitore || ''}
                        onChange={e => setCampo('fornitore', e.target.value)} className={inputClass} />
               </Field>
+              <Field label="Categoria">
+                <select value={modal.dati.categoria || 'Materiale'}
+                        onChange={e => setCampo('categoria', e.target.value)} className={inputClass}>
+                  {CATEGORIE.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Importo previsto">
                   <input type="number" step="0.01" value={modal.dati.importo_previsto || ''}
@@ -723,6 +744,12 @@ export default function Admin() {
               <Field label="Descrizione">
                 <input type="text" value={modal.dati.descrizione || ''}
                        onChange={e => setCampo('descrizione', e.target.value)} className={inputClass} />
+              </Field>
+              <Field label="Categoria">
+                <select value={modal.dati.categoria || 'Altro'}
+                        onChange={e => setCampo('categoria', e.target.value)} className={inputClass}>
+                  {CATEGORIE.map(c => <option key={c}>{c}</option>)}
+                </select>
               </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Importo (€)">
