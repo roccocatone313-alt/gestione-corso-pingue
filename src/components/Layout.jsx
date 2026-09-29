@@ -25,8 +25,9 @@ export default function Layout() {
               </p>
             </div>
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-wrap">
             <NavLink to="/" end className={linkClass}>Panoramica</NavLink>
+            <NavLink to="/sponsor" className={linkClass}>Sponsor</NavLink>
             <NavLink to="/inserisci" className={linkClass}>Inserisci</NavLink>
             <NavLink to="/admin" className={linkClass}>Admin</NavLink>
           </div>
