@@ -6,6 +6,7 @@ const TABS = [
   { id: 'sponsor',   label: 'Sponsor' },
   { id: 'acquisto',  label: 'Acquisto' },
   { id: 'scadenza',  label: 'Scadenza' },
+  { id: 'budget',    label: 'Budget' },
 ]
 
 const CATEGORIE = ['Sponsor','Materiale','Trasporti','Eventi','Cancelleria','Rimborsi','Altro']
@@ -29,7 +30,7 @@ function Field({ label, children }) {
 }
 
 const inputClass =
-  'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500'
+  'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500'
 
 function Msg({ stato, testo }) {
   if (!stato) return null
@@ -49,9 +50,7 @@ export default function Inserisci() {
     setTimeout(() => setMsg({ stato: null, testo: '' }), 4000)
   }
 
-  // ============================
   // MOVIMENTO
-  // ============================
   const [mov, setMov] = useState({
     data: oggi(), tipo: 'Entrata', importo: '', categoria: 'Sponsor',
     cellula: 'Sponsor', descrizione: '', riferimento: '',
@@ -76,9 +75,7 @@ export default function Inserisci() {
     setMov({ ...mov, importo: '', descrizione: '', riferimento: '' })
   }
 
-  // ============================
   // SPONSOR
-  // ============================
   const [sp, setSp] = useState({
     nome: '', referente: '', email: '', telefono: '',
     importo_promesso: '', importo_incassato: '',
@@ -112,9 +109,7 @@ export default function Inserisci() {
     })
   }
 
-  // ============================
   // ACQUISTO
-  // ============================
   const [ac, setAc] = useState({
     data_richiesta: oggi(), richiedente: '', descrizione: '', fornitore: '',
     importo_previsto: '', importo_effettivo: '',
@@ -151,9 +146,7 @@ export default function Inserisci() {
     })
   }
 
-  // ============================
   // SCADENZA
-  // ============================
   const [sc, setSc] = useState({
     data: oggi(), tipo: 'Pagamento', descrizione: '',
     importo: '', responsabile: '', stato: 'Da fare', note: '',
@@ -182,6 +175,30 @@ export default function Inserisci() {
     })
   }
 
+  // BUDGET
+  const [bud, setBud] = useState({
+    voce: '', categoria: 'Materiale', preventivato: '', note: '',
+  })
+
+  async function salvaBudget(e) {
+    e.preventDefault()
+    if (!bud.voce.trim()) { mostraMsg('errore', 'Voce obbligatoria.'); return }
+    if (!bud.preventivato || Number(bud.preventivato) <= 0) {
+      mostraMsg('errore', 'Preventivato non valido.'); return
+    }
+    setInvio(true)
+    const { error } = await supabase.from('budget').insert({
+      voce: bud.voce.trim(),
+      categoria: bud.categoria,
+      preventivato: Number(bud.preventivato),
+      note: bud.note.trim(),
+    })
+    setInvio(false)
+    if (error) { mostraMsg('errore', error.message); return }
+    mostraMsg('ok', 'Voce di budget registrata.')
+    setBud({ voce: '', categoria: 'Materiale', preventivato: '', note: '' })
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-4">
       <div className="bg-white rounded-xl p-2 shadow-sm flex flex-wrap gap-1">
@@ -191,8 +208,8 @@ export default function Inserisci() {
             onClick={() => setTab(t.id)}
             className={`flex-1 min-w-[90px] px-3 py-2 rounded-lg text-sm font-semibold transition ${
               tab === t.id
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-600 hover:bg-gray-100'
+                ? 'bg-sky-500 text-white'
+                : 'text-sky-800 hover:bg-sky-50'
             }`}
           >
             {t.label}
@@ -202,7 +219,7 @@ export default function Inserisci() {
 
       {msg.stato && <Msg stato={msg.stato} testo={msg.testo} />}
 
-      {/* ============ MOVIMENTO ============ */}
+      {/* MOVIMENTO */}
       {tab === 'movimento' && (
         <form onSubmit={salvaMovimento} className="bg-white rounded-xl p-6 shadow-sm space-y-4">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
@@ -258,13 +275,13 @@ export default function Inserisci() {
                    className={inputClass} />
           </Field>
           <button disabled={invio}
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-semibold rounded-lg transition">
+                  className="w-full py-2.5 bg-sky-500 hover:bg-sky-600 disabled:bg-gray-300 text-white font-semibold rounded-lg transition">
             {invio ? 'Salvataggio...' : 'Registra movimento'}
           </button>
         </form>
       )}
 
-      {/* ============ SPONSOR ============ */}
+      {/* SPONSOR */}
       {tab === 'sponsor' && (
         <form onSubmit={salvaSponsor} className="bg-white rounded-xl p-6 shadow-sm space-y-4">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
@@ -329,13 +346,13 @@ export default function Inserisci() {
                       className={inputClass} />
           </Field>
           <button disabled={invio}
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-semibold rounded-lg transition">
+                  className="w-full py-2.5 bg-sky-500 hover:bg-sky-600 disabled:bg-gray-300 text-white font-semibold rounded-lg transition">
             {invio ? 'Salvataggio...' : 'Registra sponsor'}
           </button>
         </form>
       )}
 
-      {/* ============ ACQUISTO ============ */}
+      {/* ACQUISTO */}
       {tab === 'acquisto' && (
         <form onSubmit={salvaAcquisto} className="bg-white rounded-xl p-6 shadow-sm space-y-4">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
@@ -400,13 +417,13 @@ export default function Inserisci() {
                       className={inputClass} />
           </Field>
           <button disabled={invio}
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-semibold rounded-lg transition">
+                  className="w-full py-2.5 bg-sky-500 hover:bg-sky-600 disabled:bg-gray-300 text-white font-semibold rounded-lg transition">
             {invio ? 'Salvataggio...' : 'Registra acquisto'}
           </button>
         </form>
       )}
 
-      {/* ============ SCADENZA ============ */}
+      {/* SCADENZA */}
       {tab === 'scadenza' && (
         <form onSubmit={salvaScadenza} className="bg-white rounded-xl p-6 shadow-sm space-y-4">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
@@ -457,8 +474,44 @@ export default function Inserisci() {
                       className={inputClass} />
           </Field>
           <button disabled={invio}
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-semibold rounded-lg transition">
+                  className="w-full py-2.5 bg-sky-500 hover:bg-sky-600 disabled:bg-gray-300 text-white font-semibold rounded-lg transition">
             {invio ? 'Salvataggio...' : 'Registra scadenza'}
+          </button>
+        </form>
+      )}
+
+      {/* BUDGET */}
+      {tab === 'budget' && (
+        <form onSubmit={salvaBudget} className="bg-white rounded-xl p-6 shadow-sm space-y-4">
+          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+            Nuova voce di budget
+          </h2>
+          <Field label="Voce *">
+            <input type="text" required value={bud.voce}
+                   onChange={e => setBud({ ...bud, voce: e.target.value })}
+                   placeholder="Es. Materiale sportivo"
+                   className={inputClass} />
+          </Field>
+          <Field label="Categoria">
+            <select value={bud.categoria}
+                    onChange={e => setBud({ ...bud, categoria: e.target.value })}
+                    className={inputClass}>
+              {CATEGORIE.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="Preventivato (€) *">
+            <input type="number" step="0.01" min="0" required value={bud.preventivato}
+                   onChange={e => setBud({ ...bud, preventivato: e.target.value })}
+                   className={inputClass} />
+          </Field>
+          <Field label="Note">
+            <textarea rows={2} value={bud.note}
+                      onChange={e => setBud({ ...bud, note: e.target.value })}
+                      className={inputClass} />
+          </Field>
+          <button disabled={invio}
+                  className="w-full py-2.5 bg-sky-500 hover:bg-sky-600 disabled:bg-gray-300 text-white font-semibold rounded-lg transition">
+            {invio ? 'Salvataggio...' : 'Registra voce di budget'}
           </button>
         </form>
       )}
