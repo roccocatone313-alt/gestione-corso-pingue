@@ -8,6 +8,12 @@ import {
   formattaDimensione, iconaFile,
 } from '../lib/esigenze'
 
+function euro(n) {
+  return '€ ' + Number(n || 0).toLocaleString('it-IT', {
+    minimumFractionDigits: 0, maximumFractionDigits: 2,
+  })
+}
+
 export default function Esigenze() {
   const [esigenze, setEsigenze] = useState([])
   const [sotto, setSotto] = useState([])
@@ -15,11 +21,12 @@ export default function Esigenze() {
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState({ stato: null, testo: '' })
 
-  const [aperte, setAperte] = useState({}) // { esigenzaId: true/false }
+  const [aperte, setAperte] = useState({})
   const [modalNuova, setModalNuova] = useState(null)
   const [modalRinomina, setModalRinomina] = useState(null)
   const [modalNuovaSotto, setModalNuovaSotto] = useState(null)
   const [modalRinominaSotto, setModalRinominaSotto] = useState(null)
+  const [modalImporto, setModalImporto] = useState(null)
   const [uploadModal, setUploadModal] = useState(null)
   const [salvando, setSalvando] = useState(false)
   const [caricando, setCaricando] = useState(false)
@@ -109,6 +116,17 @@ export default function Esigenze() {
     carica()
   }
 
+  async function salvaImporto() {
+    setSalvando(true)
+    const valore = modalImporto.dati.importo === '' ? null : Number(modalImporto.dati.importo)
+    const r = await aggiornaSottoesigenza(modalImporto.dati.id, { importo: valore })
+    setSalvando(false)
+    if (!r.ok) { mostraMsg('errore', r.errore); return }
+    mostraMsg('ok', 'Importo salvato.')
+    setModalImporto(null)
+    carica()
+  }
+
   async function cancellaSotto(s) {
     if (!confirm(`Eliminare "${s.titolo}"? Verranno eliminati anche i file collegati.`)) return
     const r = await eliminaSottoesigenza(s.id)
@@ -146,6 +164,26 @@ export default function Esigenze() {
     return documenti.filter(d => d.sottoesigenza_id === sottoId)
   }
 
+  // ============================
+  // Totali
+  // ============================
+  function totaleEsigenza(esigenzaId) {
+    return sotto
+      .filter(s => s.esigenza_id === esigenzaId)
+      .reduce((sum, s) => sum + (Number(s.importo) || 0), 0)
+  }
+
+  function haImportiDaDefinire(esigenzaId) {
+    return sotto
+      .filter(s => s.esigenza_id === esigenzaId)
+      .some(s => s.importo === null || s.importo === undefined || s.importo === '')
+  }
+
+  const totaleGenerale = sotto.reduce((sum, s) => sum + (Number(s.importo) || 0), 0)
+  const totVoci = sotto.length
+  const totDefinite = sotto.filter(s => s.importo !== null && s.importo !== undefined && s.importo !== '').length
+  const totDaDefinire = totVoci - totDefinite
+
   return (
     <div className="space-y-4">
       {/* Intestazione */}
@@ -153,7 +191,7 @@ export default function Esigenze() {
         <div>
           <h2 className="text-lg font-bold text-gray-800">Esigenze</h2>
           <p className="text-sm text-gray-500">
-            Raccolta di tutte le richieste e necessità del corso, con documenti allegati
+            Raccolta di tutte le richieste del corso, con importi e documenti
           </p>
         </div>
         <button
@@ -162,6 +200,27 @@ export default function Esigenze() {
         >
           + Nuova esigenza
         </button>
+      </div>
+
+      {/* Riepilogo globale */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <div className="bg-white rounded-xl p-4 shadow-sm border-l-4 border-sky-500">
+          <div className="text-xs uppercase tracking-wide text-gray-500">Totale esigenze</div>
+          <div className="text-xl font-bold text-sky-700 mt-1">{euro(totaleGenerale)}</div>
+          <div className="text-xs text-gray-400 mt-1">{totVoci} voci</div>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-sm border-l-4 border-green-500">
+          <div className="text-xs uppercase tracking-wide text-gray-500">Definite</div>
+          <div className="text-xl font-bold text-green-700 mt-1">{totDefinite}</div>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-sm border-l-4 border-amber-500">
+          <div className="text-xs uppercase tracking-wide text-gray-500">Da definire</div>
+          <div className="text-xl font-bold text-amber-700 mt-1">{totDaDefinire}</div>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-sm border-l-4 border-gray-300">
+          <div className="text-xs uppercase tracking-wide text-gray-500">Esigenze</div>
+          <div className="text-xl font-bold text-gray-700 mt-1">{esigenze.length}</div>
+        </div>
       </div>
 
       {msg.stato && (
@@ -186,6 +245,8 @@ export default function Esigenze() {
           {esigenze.map(e => {
             const figlie = sotto.filter(s => s.esigenza_id === e.id)
             const isOpen = !!aperte[e.id]
+            const totEsig = totaleEsigenza(e.id)
+            const daDefinire = haImportiDaDefinire(e.id)
             const totFile = figlie.reduce((sum, s) => sum + docsDiSotto(s.id).length, 0)
 
             return (
@@ -203,6 +264,19 @@ export default function Esigenze() {
                       {totFile > 0 && <> · {totFile} {totFile === 1 ? 'file' : 'file'}</>}
                     </div>
                   </div>
+
+                  {/* Totale esigenza */}
+                  <div className="text-right shrink-0 mr-2">
+                    {daDefinire ? (
+                      <div className="text-lg font-bold text-amber-600">
+                        {euro(totEsig)} <span className="text-xs">+ ?</span>
+                      </div>
+                    ) : (
+                      <div className="text-lg font-bold text-gray-800">{euro(totEsig)}</div>
+                    )}
+                  </div>
+
+                  {/* Azioni */}
                   <div className="flex items-center gap-1 shrink-0" onClick={ev => ev.stopPropagation()}>
                     <button
                       onClick={() => setModalRinomina({ dati: { ...e } })}
@@ -242,6 +316,7 @@ export default function Esigenze() {
 
                     {figlie.map(s => {
                       const d = docsDiSotto(s.id)
+                      const importoDefinito = s.importo !== null && s.importo !== undefined && s.importo !== ''
                       return (
                         <div key={s.id} className="bg-white rounded-lg border border-gray-200 p-3">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -253,13 +328,33 @@ export default function Esigenze() {
                                 </div>
                               )}
                             </div>
-                            <div className="flex items-center gap-1">
+
+                            {/* Importo cliccabile */}
+                            <button
+                              onClick={() => setModalImporto({
+                                dati: {
+                                  id: s.id,
+                                  titolo: s.titolo,
+                                  importo: importoDefinito ? s.importo : '',
+                                }
+                              })}
+                              className={`px-3 py-1.5 rounded-lg font-bold text-sm shrink-0 transition ${
+                                importoDefinito
+                                  ? 'bg-sky-50 text-sky-700 hover:bg-sky-100'
+                                  : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-dashed border-amber-300'
+                              }`}
+                              title="Clicca per modificare l'importo"
+                            >
+                              {importoDefinito ? euro(s.importo) : '€ ?'}
+                            </button>
+
+                            <div className="flex items-center gap-1 shrink-0">
                               <button
                                 onClick={() => setUploadModal({ sottoesigenzaId: s.id, file: null, titolo: s.titolo })}
                                 title="Carica file"
                                 className="text-xs px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-lg hover:bg-emerald-200 font-semibold"
                               >
-                                📎 Carica
+                                📎
                               </button>
                               <button
                                 onClick={() => setModalRinominaSotto({ dati: { ...s } })}
@@ -309,6 +404,18 @@ export default function Esigenze() {
                       )
                     })}
 
+                    {/* Totale parziale dell'esigenza */}
+                    {figlie.length > 0 && (
+                      <div className="flex justify-between items-center px-3 py-2 bg-gray-100 rounded-lg">
+                        <span className="text-xs uppercase tracking-wide text-gray-600 font-semibold">
+                          Totale {e.titolo}
+                        </span>
+                        <span className="font-bold text-gray-800">
+                          {euro(totEsig)} {daDefinire && <span className="text-amber-600 text-xs">+ ?</span>}
+                        </span>
+                      </div>
+                    )}
+
                     <button
                       onClick={() => setModalNuovaSotto({ esigenzaId: e.id, titolo: '' })}
                       className="w-full py-2 text-sm font-semibold text-sky-700 bg-white border border-dashed border-sky-300 rounded-lg hover:bg-sky-50"
@@ -320,6 +427,25 @@ export default function Esigenze() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Totale generale */}
+      {!loading && sotto.length > 0 && (
+        <div className="bg-gradient-to-br from-sky-800 to-sky-900 rounded-xl p-6 shadow-md text-white">
+          <div className="flex justify-between items-center flex-wrap gap-3">
+            <span className="text-sm uppercase tracking-widest font-bold opacity-90">
+              Totale generale
+            </span>
+            <span className="text-3xl font-bold" style={{ fontFamily: 'Playfair Display, serif' }}>
+              {euro(totaleGenerale)} {totDaDefinire > 0 && <span className="text-amber-300 text-lg">+ ?</span>}
+            </span>
+          </div>
+          {totDaDefinire > 0 && (
+            <p className="mt-3 pt-3 border-t border-white/20 text-xs italic opacity-80">
+              Il totale è <strong>parziale</strong>: {totDaDefinire} {totDaDefinire === 1 ? 'voce è ancora' : 'voci sono ancora'} da definire.
+            </p>
+          )}
         </div>
       )}
 
@@ -406,6 +532,50 @@ export default function Esigenze() {
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500"
             />
           </label>
+        </Modal>
+      )}
+
+      {/* MODALE IMPORTO */}
+      {modalImporto && (
+        <Modal
+          titolo={`Importo — ${modalImporto.dati.titolo}`}
+          onClose={() => setModalImporto(null)}
+          onSave={salvaImporto}
+          salvando={salvando}
+        >
+          <label className="block">
+            <span className="block text-xs font-semibold text-gray-600 mb-1">Importo in euro</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              autoFocus
+              value={modalImporto.dati.importo}
+              onChange={e => setModalImporto({ dati: { ...modalImporto.dati, importo: e.target.value } })}
+              placeholder="Lascia vuoto se ancora da definire"
+              className="w-full px-3 py-2 text-lg font-bold border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500"
+            />
+          </label>
+          <p className="text-xs text-gray-500">
+            Se lasci vuoto, la voce resta contrassegnata come "da definire" (€ ?).
+          </p>
+          {modalImporto.dati.importo !== '' && !isNaN(Number(modalImporto.dati.importo)) && (
+            <div className="mt-3 p-3 bg-sky-50 rounded-lg text-center">
+              <div className="text-xs text-gray-500 uppercase tracking-wide">Anteprima</div>
+              <div className="text-2xl font-bold text-sky-700 mt-1">
+                {euro(modalImporto.dati.importo)}
+              </div>
+            </div>
+          )}
+          {modalImporto.dati.importo !== '' && (
+            <button
+              type="button"
+              onClick={() => setModalImporto({ dati: { ...modalImporto.dati, importo: '' } })}
+              className="mt-2 text-xs text-red-600 hover:text-red-800 font-semibold"
+            >
+              Svuota importo (segna come "da definire")
+            </button>
+          )}
         </Modal>
       )}
 
