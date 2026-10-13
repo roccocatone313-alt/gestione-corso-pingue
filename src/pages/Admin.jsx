@@ -17,6 +17,7 @@ const STATI_SPONSOR  = ['Prospect','In trattativa','Confermato','Incassato','Per
 const STATI_ACQUISTO = ['Da approvare','Approvato','Ordinato','Ricevuto','Pagato','Rifiutato']
 const TIPI_SCADENZA  = ['Pagamento','Incasso','Contratto','Rinnovo','Rimborso','Altro']
 const STATI_SCADENZA = ['Da fare','In corso','Completata','Annullata']
+const STATI_BUDGET   = ['Pianificato','In corso','Completato','Annullato']
 
 const inputClass =
   'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500'
@@ -53,6 +54,9 @@ function badge(stato) {
     'In corso':      'bg-blue-100 text-blue-800',
     'Completata':    'bg-green-100 text-green-800',
     'Annullata':     'bg-red-100 text-red-800',
+    'Pianificato':   'bg-gray-100 text-gray-700',
+    'Completato':    'bg-green-100 text-green-800',
+    'Annullato':     'bg-red-100 text-red-800',
   }
   const cls = map[stato] || 'bg-gray-100 text-gray-700'
   return (
@@ -240,13 +244,14 @@ export default function Admin() {
             onChange={e => setFiltro(e.target.value)}
             className={inputClass + ' flex-1 min-w-[180px]'}
           />
-          {['sponsor', 'acquisti', 'scadenze'].includes(tab) && (
+          {['sponsor', 'acquisti', 'scadenze', 'budget'].includes(tab) && (
             <select value={filtroStato} onChange={e => setFiltroStato(e.target.value)}
                     className={inputClass + ' w-auto'}>
               <option value="">Tutti gli stati</option>
               {tab === 'sponsor'   && STATI_SPONSOR.map(s => <option key={s}>{s}</option>)}
               {tab === 'acquisti'  && STATI_ACQUISTO.map(s => <option key={s}>{s}</option>)}
               {tab === 'scadenze'  && STATI_SCADENZA.map(s => <option key={s}>{s}</option>)}
+              {tab === 'budget'    && STATI_BUDGET.map(s => <option key={s}>{s}</option>)}
             </select>
           )}
         </div>
@@ -434,7 +439,7 @@ export default function Admin() {
             })()}
 
             {tab === 'budget' && (() => {
-              const lista = filtraLista(budget, ['voce', 'categoria'])
+              const lista = filtraLista(budget, ['voce', 'categoria', 'cellula', 'fornitore_previsto'])
               if (!lista.length) return <div className="text-center text-gray-400 italic py-8">Nessuna voce di budget.</div>
               return (
                 <div className="overflow-x-auto">
@@ -442,10 +447,13 @@ export default function Admin() {
                     <thead>
                       <tr className="text-left text-xs uppercase text-gray-500 border-b border-gray-100">
                         <th className="py-2 px-2">Voce</th>
+                        <th className="py-2 px-2">Cellula</th>
                         <th className="py-2 px-2">Categoria</th>
+                        <th className="py-2 px-2">Fornitore</th>
                         <th className="py-2 px-2 text-right">Preventivato</th>
                         <th className="py-2 px-2 text-right">Consuntivo</th>
                         <th className="py-2 px-2 text-right">Disponibile</th>
+                        <th className="py-2 px-2">Stato</th>
                         <th className="py-2 px-2"></th>
                       </tr>
                     </thead>
@@ -458,12 +466,21 @@ export default function Admin() {
                         return (
                           <tr key={b.id} className="border-b border-gray-50 last:border-0">
                             <td className="py-2 px-2 font-medium">{b.voce}</td>
+                            <td className="py-2 px-2">
+                              {b.cellula ? (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-800">
+                                  {b.cellula}
+                                </span>
+                              ) : '—'}
+                            </td>
                             <td className="py-2 px-2">{b.categoria || '—'}</td>
+                            <td className="py-2 px-2">{b.fornitore_previsto || '—'}</td>
                             <td className="py-2 px-2 text-right">{euro(b.preventivato)}</td>
                             <td className="py-2 px-2 text-right">{euro(consuntivo)}</td>
                             <td className={`py-2 px-2 text-right font-medium ${
                               disp >= 0 ? 'text-green-700' : 'text-red-700'
                             }`}>{euro(disp)}</td>
+                            <td className="py-2 px-2">{badge(b.stato)}</td>
                             <td className="py-2 px-2 text-right whitespace-nowrap">
                               <button onClick={() => setModal({ tipo: 'budget', dati: { ...b } })}
                                       className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded mr-1 hover:bg-blue-200 font-semibold">
@@ -737,15 +754,39 @@ export default function Admin() {
                 <input type="text" value={modal.dati.voce || ''}
                        onChange={e => setCampo('voce', e.target.value)} className={inputClass} />
               </Field>
-              <Field label="Categoria">
-                <select value={modal.dati.categoria || ''}
-                        onChange={e => setCampo('categoria', e.target.value)} className={inputClass}>
-                  {CATEGORIE.map(c => <option key={c}>{c}</option>)}
-                </select>
-              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Categoria">
+                  <select value={modal.dati.categoria || ''}
+                          onChange={e => setCampo('categoria', e.target.value)} className={inputClass}>
+                    {CATEGORIE.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                </Field>
+                <Field label="Cellula">
+                  <select value={modal.dati.cellula || 'Budget'}
+                          onChange={e => setCampo('cellula', e.target.value)} className={inputClass}>
+                    {CELLULE.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                </Field>
+              </div>
               <Field label="Preventivato (€)">
                 <input type="number" step="0.01" value={modal.dati.preventivato || ''}
                        onChange={e => setCampo('preventivato', e.target.value)} className={inputClass} />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Fornitore previsto">
+                  <input type="text" value={modal.dati.fornitore_previsto || ''}
+                         onChange={e => setCampo('fornitore_previsto', e.target.value)} className={inputClass} />
+                </Field>
+                <Field label="Data prevista">
+                  <input type="date" value={modal.dati.data_prevista || ''}
+                         onChange={e => setCampo('data_prevista', e.target.value)} className={inputClass} />
+                </Field>
+              </div>
+              <Field label="Stato">
+                <select value={modal.dati.stato || 'Pianificato'}
+                        onChange={e => setCampo('stato', e.target.value)} className={inputClass}>
+                  {STATI_BUDGET.map(s => <option key={s}>{s}</option>)}
+                </select>
               </Field>
               <Field label="Note">
                 <textarea rows={2} value={modal.dati.note || ''}

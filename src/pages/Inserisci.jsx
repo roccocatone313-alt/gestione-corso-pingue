@@ -15,6 +15,7 @@ const STATI_SPONSOR  = ['Prospect','In trattativa','Confermato','Incassato','Per
 const STATI_ACQUISTO = ['Da approvare','Approvato','Ordinato','Ricevuto','Pagato','Rifiutato']
 const TIPI_SCADENZA  = ['Pagamento','Incasso','Contratto','Rinnovo','Rimborso','Altro']
 const STATI_SCADENZA = ['Da fare','In corso','Completata','Annullata']
+const STATI_BUDGET   = ['Pianificato','In corso','Completato','Annullato']
 
 function oggi() {
   return new Date().toISOString().slice(0, 10)
@@ -50,7 +51,6 @@ export default function Inserisci() {
     setTimeout(() => setMsg({ stato: null, testo: '' }), 4000)
   }
 
-  // MOVIMENTO
   const [mov, setMov] = useState({
     data: oggi(), tipo: 'Entrata', importo: '', categoria: 'Sponsor',
     cellula: 'Sponsor', descrizione: '', riferimento: '',
@@ -75,7 +75,6 @@ export default function Inserisci() {
     setMov({ ...mov, importo: '', descrizione: '', riferimento: '' })
   }
 
-  // SPONSOR
   const [sp, setSp] = useState({
     nome: '', referente: '', email: '', telefono: '',
     importo_promesso: '', importo_incassato: '',
@@ -110,7 +109,6 @@ export default function Inserisci() {
     })
   }
 
-  // ACQUISTO
   const [ac, setAc] = useState({
     data_richiesta: oggi(), richiedente: '', descrizione: '', fornitore: '',
     categoria: 'Materiale',
@@ -150,7 +148,6 @@ export default function Inserisci() {
     })
   }
 
-  // SCADENZA
   const [sc, setSc] = useState({
     data: oggi(), tipo: 'Pagamento', descrizione: '',
     categoria: 'Altro',
@@ -175,15 +172,14 @@ export default function Inserisci() {
     setInvio(false)
     if (error) { mostraMsg('errore', error.message); return }
     mostraMsg('ok', 'Scadenza registrata.')
-    setSc({
-      ...sc,
-      descrizione: '', importo: '', responsabile: '', note: '',
-    })
+    setSc({ ...sc, descrizione: '', importo: '', responsabile: '', note: '' })
   }
 
   // BUDGET
   const [bud, setBud] = useState({
-    voce: '', categoria: 'Materiale', preventivato: '', note: '',
+    voce: '', categoria: 'Materiale', preventivato: '',
+    cellula: 'Budget', fornitore_previsto: '',
+    data_prevista: '', stato: 'Pianificato', note: '',
   })
 
   async function salvaBudget(e) {
@@ -197,12 +193,16 @@ export default function Inserisci() {
       voce: bud.voce.trim(),
       categoria: bud.categoria,
       preventivato: Number(bud.preventivato),
-      note: bud.note.trim(),
+      cellula: bud.cellula,
+      fornitore_previsto: bud.fornitore_previsto.trim() || null,
+      data_prevista: bud.data_prevista || null,
+      stato: bud.stato,
+      note: bud.note.trim() || null,
     })
     setInvio(false)
     if (error) { mostraMsg('errore', error.message); return }
     mostraMsg('ok', 'Voce di budget registrata.')
-    setBud({ ...bud, voce: '', preventivato: '', note: '' })
+    setBud({ ...bud, voce: '', preventivato: '', fornitore_previsto: '', data_prevista: '', note: '' })
   }
 
   return (
@@ -509,20 +509,49 @@ export default function Inserisci() {
           <Field label="Voce *">
             <input type="text" required value={bud.voce}
                    onChange={e => setBud({ ...bud, voce: e.target.value })}
-                   placeholder="Es. Materiale sportivo"
+                   placeholder="Es. Palloni allenamento"
                    className={inputClass} />
           </Field>
-          <Field label="Categoria">
-            <select value={bud.categoria}
-                    onChange={e => setBud({ ...bud, categoria: e.target.value })}
-                    className={inputClass}>
-              {CATEGORIE.map(c => <option key={c}>{c}</option>)}
-            </select>
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Categoria">
+              <select value={bud.categoria}
+                      onChange={e => setBud({ ...bud, categoria: e.target.value })}
+                      className={inputClass}>
+                {CATEGORIE.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </Field>
+            <Field label="Cellula">
+              <select value={bud.cellula}
+                      onChange={e => setBud({ ...bud, cellula: e.target.value })}
+                      className={inputClass}>
+                {CELLULE.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </Field>
+          </div>
           <Field label="Preventivato (€) *">
             <input type="number" step="0.01" min="0.01" required value={bud.preventivato}
                    onChange={e => setBud({ ...bud, preventivato: e.target.value })}
                    className={inputClass} />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Fornitore previsto">
+              <input type="text" value={bud.fornitore_previsto}
+                     onChange={e => setBud({ ...bud, fornitore_previsto: e.target.value })}
+                     placeholder="Es. Decathlon"
+                     className={inputClass} />
+            </Field>
+            <Field label="Data prevista">
+              <input type="date" value={bud.data_prevista}
+                     onChange={e => setBud({ ...bud, data_prevista: e.target.value })}
+                     className={inputClass} />
+            </Field>
+          </div>
+          <Field label="Stato">
+            <select value={bud.stato}
+                    onChange={e => setBud({ ...bud, stato: e.target.value })}
+                    className={inputClass}>
+              {STATI_BUDGET.map(s => <option key={s}>{s}</option>)}
+            </select>
           </Field>
           <Field label="Note">
             <textarea rows={2} value={bud.note}

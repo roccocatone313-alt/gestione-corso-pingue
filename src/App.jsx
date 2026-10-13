@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import Inserisci from './pages/Inserisci'
 import Admin from './pages/Admin'
 import Sponsor from './pages/Sponsor'
+import Budget from './pages/Budget'
 
 export default function App() {
   return (
@@ -11,8 +12,9 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
-          <Route path="inserisci" element={<Inserisci />} />
           <Route path="sponsor" element={<Sponsor />} />
+          <Route path="budget" element={<Budget />} />
+          <Route path="inserisci" element={<Inserisci />} />
           <Route path="admin" element={<Admin />} />
         </Route>
       </Routes>
