@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Modal from '../components/Modal'
+import InfoBox from '../components/InfoBox'
 import {
   caricaFile, urlFile, eliminaFile, getDocumentiBudget,
   formattaDimensione, iconaFile
@@ -44,9 +45,6 @@ function badgeStato(stato) {
   )
 }
 
-// ============================================
-// Barra di avanzamento
-// ============================================
 function BarraAvanzamento({ preventivato, speso }) {
   const prev = Number(preventivato) || 0
   const sp = Number(speso) || 0
@@ -83,8 +81,8 @@ export default function Budget() {
   const [tab, setTab] = useState('Tutte')
   const [filtroStato, setFiltroStato] = useState('')
 
-  const [modal, setModal] = useState(null) // modifica voce
-  const [uploadModal, setUploadModal] = useState(null) // { budgetId, tipo, file }
+  const [modal, setModal] = useState(null)
+  const [uploadModal, setUploadModal] = useState(null)
   const [salvando, setSalvando] = useState(false)
   const [caricandoFile, setCaricandoFile] = useState(false)
 
@@ -103,7 +101,6 @@ export default function Budget() {
     setBudget(b.data || [])
     setMovimenti(m.data || [])
 
-    // Carica i documenti di ogni voce
     const mappa = {}
     for (const voce of (b.data || [])) {
       mappa[voce.id] = await getDocumentiBudget(voce.id)
@@ -114,18 +111,12 @@ export default function Budget() {
 
   useEffect(() => { carica() }, [])
 
-  // ============================================
-  // Calcolo speso per voce
-  // ============================================
   function spesoPerVoce(nomeVoce) {
     return movimenti
       .filter(m => m.categoria === nomeVoce)
       .reduce((s, m) => s + (Number(m.importo) || 0), 0)
   }
 
-  // ============================================
-  // Modale modifica voce
-  // ============================================
   function apriModifica(voce) {
     setModal({ dati: { ...voce } })
   }
@@ -190,9 +181,6 @@ export default function Budget() {
     carica()
   }
 
-  // ============================================
-  // Upload documento
-  // ============================================
   function apriUpload(budgetId) {
     setUploadModal({ budgetId, tipo: 'fattura', file: null })
   }
@@ -219,25 +207,27 @@ export default function Budget() {
     carica()
   }
 
-  // ============================================
-  // Filtri
-  // ============================================
   const listaFiltrata = budget.filter(b => {
     if (tab !== 'Tutte' && b.cellula !== tab) return false
     if (filtroStato && b.stato !== filtroStato) return false
     return true
   })
 
-  // ============================================
-  // Riepilogo globale
-  // ============================================
   const totPreventivato = budget.reduce((s, b) => s + (Number(b.preventivato) || 0), 0)
   const totSpeso = movimenti.reduce((s, m) => s + (Number(m.importo) || 0), 0)
   const totDisponibile = totPreventivato - totSpeso
 
   return (
     <div className="space-y-4">
-      {/* Intestazione */}
+      <InfoBox id="budget" titolo="Budget — il piano ufficiale delle spese">
+        <p>Qui ci sono le voci <strong>approvate</strong>. Ogni voce ha:</p>
+        <p>• <strong>Preventivato</strong>: quanto hai deciso di spendere (lo scrivi tu)</p>
+        <p>• <strong>Speso</strong>: quanto hai speso davvero (si calcola da solo dai movimenti)</p>
+        <p>• <strong>Disponibile</strong>: la differenza</p>
+        <p>La barra colorata mostra l'avanzamento: verde ok, gialla attenzione, rossa hai sforato.</p>
+        <p>I tab in alto filtrano per cellula. Puoi caricare <strong>fatture e preventivi</strong> da ogni voce.</p>
+      </InfoBox>
+
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-lg font-bold text-gray-800">Rendiconto Budget</h2>
@@ -253,7 +243,6 @@ export default function Budget() {
         </button>
       </div>
 
-      {/* Riepilogo globale */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl p-5 shadow-sm border-l-4 border-sky-500">
           <div className="text-xs uppercase tracking-wide text-gray-500">Totale preventivato</div>
@@ -283,7 +272,6 @@ export default function Budget() {
         </div>
       )}
 
-      {/* Tab per cellula */}
       <div className="bg-white rounded-xl p-2 shadow-sm flex flex-wrap gap-1">
         {['Tutte', ...CELLULE].map(c => (
           <button
@@ -298,7 +286,6 @@ export default function Budget() {
         ))}
       </div>
 
-      {/* Filtro stato */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm text-gray-600">Filtra:</span>
         <button
@@ -322,7 +309,6 @@ export default function Budget() {
         ))}
       </div>
 
-      {/* Lista voci */}
       {loading ? (
         <div className="text-center text-gray-400 italic py-10">Caricamento...</div>
       ) : listaFiltrata.length === 0 ? (
@@ -338,7 +324,6 @@ export default function Budget() {
 
             return (
               <div key={b.id} className="bg-white rounded-xl p-5 shadow-sm space-y-3">
-                {/* Header voce */}
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-gray-800 truncate">{b.voce}</div>
@@ -357,7 +342,6 @@ export default function Budget() {
                   </div>
                 </div>
 
-                {/* Info secondarie */}
                 {(b.fornitore_previsto || b.data_prevista) && (
                   <div className="flex flex-wrap gap-3 text-xs text-gray-500">
                     {b.fornitore_previsto && (
@@ -369,7 +353,6 @@ export default function Budget() {
                   </div>
                 )}
 
-                {/* Numeri */}
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="bg-gray-50 rounded-lg p-2">
                     <div className="text-xs text-gray-500 uppercase">Preventivato</div>
@@ -391,10 +374,8 @@ export default function Budget() {
                   </div>
                 </div>
 
-                {/* Barra avanzamento */}
                 <BarraAvanzamento preventivato={b.preventivato} speso={speso} />
 
-                {/* Documenti */}
                 <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                   <button
                     onClick={() => apriUpload(b.id)}
@@ -412,7 +393,6 @@ export default function Budget() {
         </div>
       )}
 
-      {/* MODAL MODIFICA VOCE */}
       {modal && (
         <Modal
           titolo={modal.dati.id ? 'Voce: ' + modal.dati.voce : 'Nuova voce di budget'}
@@ -472,7 +452,6 @@ export default function Budget() {
                       className={inputClass} />
           </Field>
 
-          {/* Documenti collegati */}
           {modal.dati.id && (
             <div className="pt-3 border-t border-gray-100">
               <div className="text-xs font-semibold text-gray-600 uppercase mb-2">
@@ -525,7 +504,6 @@ export default function Budget() {
         </Modal>
       )}
 
-      {/* MODAL UPLOAD */}
       {uploadModal && (
         <Modal
           titolo="Carica documento"

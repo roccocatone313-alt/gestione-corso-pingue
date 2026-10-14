@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Modal from '../components/Modal'
+import InfoBox from '../components/InfoBox'
 
 const COLONNE = [
   { stato: 'Prospect',      colore: 'bg-gray-50',   bordo: 'border-gray-300',  testo: 'text-gray-700',   totale: 'text-gray-800' },
@@ -37,7 +38,7 @@ export default function Sponsor() {
   const [dragOver, setDragOver] = useState(null)
   const [msg, setMsg] = useState({ stato: null, testo: '' })
 
-  const [modal, setModal] = useState(null) // { dati: {...} } — id presente = modifica, assente = nuovo
+  const [modal, setModal] = useState(null)
   const [salvando, setSalvando] = useState(false)
 
   function mostraMsg(stato, testo) {
@@ -58,9 +59,6 @@ export default function Sponsor() {
 
   useEffect(() => { carica() }, [])
 
-  // ============================
-  // Drag & Drop
-  // ============================
   function onDragStart(e, id) {
     setDraggedId(id)
     e.dataTransfer.effectAllowed = 'move'
@@ -94,15 +92,16 @@ export default function Sponsor() {
   }
 
   async function cambiaStato(id, nuovoStato) {
+    if (nuovoStato === 'Incassato') {
+      const ok = confirm('Impostare come "Incassato" creerà automaticamente un movimento Entrata. Confermi?')
+      if (!ok) return
+    }
     const { error } = await supabase.from('sponsor').update({ stato: nuovoStato }).eq('id', id)
     if (error) { mostraMsg('errore', error.message); return }
     setSponsor(lista => lista.map(s => s.id === id ? { ...s, stato: nuovoStato } : s))
     mostraMsg('ok', 'Stato aggiornato: ' + nuovoStato)
   }
 
-  // ============================
-  // Modale
-  // ============================
   function nuovoSponsor() {
     setModal({
       dati: {
@@ -125,6 +124,18 @@ export default function Sponsor() {
     if (!modal) return
     const d = modal.dati
     if (!d.nome || !d.nome.trim()) { mostraMsg('errore', 'Nome obbligatorio.'); return }
+
+    if (d.id && d.stato === 'Incassato') {
+      const s = sponsor.find(x => x.id === d.id)
+      if (s && s.stato !== 'Incassato') {
+        const ok = confirm('Impostare come "Incassato" creerà automaticamente un movimento Entrata. Confermi?')
+        if (!ok) return
+      }
+    }
+    if (!d.id && d.stato === 'Incassato') {
+      const ok = confirm('Creare lo sponsor come "Incassato" genererà automaticamente un movimento Entrata. Confermi?')
+      if (!ok) return
+    }
 
     setSalvando(true)
 
@@ -167,16 +178,23 @@ export default function Sponsor() {
     carica()
   }
 
-  // ============================
-  // Statistiche
-  // ============================
   const totalePromesso = sponsor.reduce((s, x) => s + (Number(x.importo_promesso) || 0), 0)
   const totaleIncassato = sponsor.reduce((s, x) => s + (Number(x.importo_incassato) || 0), 0)
   const totaleMancante = totalePromesso - totaleIncassato
 
   return (
     <div className="space-y-4">
-      {/* Riepilogo in alto */}
+      <InfoBox id="sponsor" titolo="Sponsor — la pipeline dei finanziatori">
+        <p>Qui gestisci chi vi dà soldi, dalla prima chiacchierata all'incasso.</p>
+        <p>• <strong>Prospect</strong> — l'hai contattato</p>
+        <p>• <strong>In trattativa</strong> — ci stai parlando</p>
+        <p>• <strong>Confermato</strong> — ha detto sì</p>
+        <p>• <strong>Incassato</strong> — ha pagato (crea un'Entrata automatica)</p>
+        <p>• <strong>Perso</strong> — non se ne fa nulla</p>
+        <p><strong>Su desktop</strong> trascini le card da una colonna all'altra. <strong>Su mobile</strong> clicchi la card e cambi stato dal menu.</p>
+        <p>Quando metti "Incassato", l'app registra da sola l'entrata in contabilità.</p>
+      </InfoBox>
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl p-5 shadow-sm border-l-4 border-sky-500">
           <div className="text-xs uppercase tracking-wide text-gray-500">Totale promesso</div>
@@ -192,12 +210,11 @@ export default function Sponsor() {
         </div>
       </div>
 
-      {/* Intestazione + pulsante nuovo */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-lg font-bold text-gray-800">Pipeline sponsor</h2>
           <p className="text-sm text-gray-500">
-            {sponsor.length} sponsor in totale — trascina le card per cambiare stato
+            {sponsor.length} sponsor in totale — trascina le card su desktop, tocca la card su mobile per modificare
           </p>
         </div>
         <button
@@ -218,7 +235,6 @@ export default function Sponsor() {
         </div>
       )}
 
-      {/* Board */}
       {loading ? (
         <div className="text-center text-gray-400 italic py-10">Caricamento...</div>
       ) : (
@@ -243,7 +259,7 @@ export default function Sponsor() {
                   {col.stato}
                 </div>
                 <div className={`text-xs ${col.testo} mb-3`}>
-                  {cards.length} {cards.length === 1 ? 'sponsor' : 'sponsor'}
+                  {cards.length} sponsor
                   {cards.length > 0 && (
                     <> — prom. {euro(totProm)} — inc. {euro(totInc)}</>
                   )}
@@ -257,11 +273,17 @@ export default function Sponsor() {
                       onDragStart={e => onDragStart(e, s.id)}
                       onDragEnd={onDragEnd}
                       onClick={() => apriModifica(s)}
-                      className={`bg-white rounded-lg p-3 shadow-sm border border-gray-100 cursor-grab active:cursor-grabbing hover:shadow-md transition ${
+                      className={`bg-white rounded-lg p-3 shadow-sm border border-gray-100 cursor-grab active:cursor-grabbing hover:shadow-md transition relative ${
                         draggedId === s.id ? 'opacity-40' : ''
                       }`}
                     >
-                      <div className="font-semibold text-sm text-gray-800 truncate">
+                      <span
+                        className="absolute top-2 right-2 text-gray-300 hover:text-sky-500 text-xs"
+                        title="Tocca per modificare"
+                      >
+                        ✎
+                      </span>
+                      <div className="font-semibold text-sm text-gray-800 truncate pr-6">
                         {s.nome}
                       </div>
                       {s.referente && (
@@ -292,7 +314,6 @@ export default function Sponsor() {
         </div>
       )}
 
-      {/* Modale nuovo/modifica */}
       {modal && (
         <Modal
           titolo={modal.dati.id ? 'Sponsor: ' + modal.dati.nome : 'Nuovo sponsor'}

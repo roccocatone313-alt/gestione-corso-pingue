@@ -1,22 +1,19 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { esportaExcel, esportaPDF } from '../lib/export'
+import InfoBox from '../components/InfoBox'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell
 } from 'recharts'
 
-const COLORI = ['#3182ce','#38a169','#d69e2e','#e53e3e','#805ad5',
+const COLORI = ['#0ea5e9','#38a169','#d69e2e','#e53e3e','#805ad5',
                 '#dd6b20','#319795','#d53f8c','#718096','#2c5282']
 
 function euro(n) {
   return '€ ' + Number(n || 0).toLocaleString('it-IT', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
   })
-}
-
-function euroShort(n) {
-  return '€ ' + Number(n || 0).toLocaleString('it-IT', { maximumFractionDigits: 0 })
 }
 
 function Card({ label, value, sub, color = 'gray' }) {
@@ -24,7 +21,7 @@ function Card({ label, value, sub, color = 'gray' }) {
     gray:  { border: 'border-l-gray-300', value: 'text-gray-800' },
     green: { border: 'border-l-green-500', value: 'text-green-700' },
     red:   { border: 'border-l-red-500',   value: 'text-red-700' },
-    blue:  { border: 'border-l-blue-500',  value: 'text-blue-700' },
+    blue:  { border: 'border-l-sky-500',   value: 'text-sky-700' },
     amber: { border: 'border-l-amber-500', value: 'text-amber-700' },
   }[color]
   return (
@@ -39,6 +36,7 @@ function Card({ label, value, sub, color = 'gray' }) {
 export default function Dashboard() {
   const [dati, setDati] = useState(null)
   const [errore, setErrore] = useState(null)
+  const [raw, setRaw] = useState(null)
 
   useEffect(() => {
     async function carica() {
@@ -57,6 +55,8 @@ export default function Dashboard() {
       const acquisti = acq.data || []
       const budget = bud.data || []
       const scadenze = scad.data || []
+
+      setRaw({ movimenti, sponsor, acquisti, budget, scadenze })
 
       let entrate = 0, uscite = 0
       movimenti.forEach(m => {
@@ -90,7 +90,6 @@ export default function Dashboard() {
         .sort((a, b) => new Date(b.data) - new Date(a.data))
         .slice(0, 5)
 
-      // --- Grafico 1: entrate/uscite per mese (ultimi 12 mesi) ---
       const oggiMese = new Date()
       const perMese = {}
       const ordineMesi = []
@@ -112,7 +111,6 @@ export default function Dashboard() {
       })
       const datiMesi = ordineMesi.map(k => perMese[k])
 
-      // --- Grafico 2: sponsor per stato ---
       const perStato = {}
       sponsor.forEach(s => {
         if (!s.nome) return
@@ -121,7 +119,6 @@ export default function Dashboard() {
       })
       const datiSponsor = Object.entries(perStato).map(([name, value]) => ({ name, value }))
 
-      // --- Grafico 3: uscite per categoria ---
       const perCategoria = {}
       movimenti.forEach(m => {
         if (m.tipo !== 'Uscita') return
@@ -158,7 +155,37 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* --- Card --- */}
+      <InfoBox id="dashboard" titolo="Dashboard — cosa stai vedendo">
+        <p>Qui vedi la <strong>situazione economica del corso</strong> in tempo reale.</p>
+        <p>• <strong>Saldo</strong>: entrate meno uscite, quanto hai in cassa.</p>
+        <p>• <strong>Budget residuo</strong>: quanto ti resta da spendere rispetto al piano.</p>
+        <p>• <strong>Sponsor incassati</strong>: quanto hai ricevuto rispetto al promesso.</p>
+        <p>• <strong>Acquisti da pagare</strong>: fatture aperte.</p>
+        <p>• <strong>Scadenze</strong>: cose con una data da non dimenticare.</p>
+        <p>I grafici mostrano l'andamento per mese, dove vanno gli sponsor, e dove spendi di più.</p>
+      </InfoBox>
+
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h2 className="text-lg font-bold text-gray-800">Panoramica</h2>
+          <p className="text-sm text-gray-500">Situazione economica del corso in tempo reale</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => raw && esportaExcel(raw)}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg shadow-sm"
+          >
+            📥 Esporta Excel
+          </button>
+          <button
+            onClick={() => raw && esportaPDF(raw)}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg shadow-sm"
+          >
+            📄 Esporta PDF
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card label="Saldo attuale" value={euro(dati.saldo)} sub="Entrate meno uscite"
               color={dati.saldo >= 0 ? 'green' : 'red'} />
@@ -179,7 +206,6 @@ export default function Dashboard() {
               color={dati.scadenzeScadute > 0 ? 'red' : dati.scadenzeProssime > 0 ? 'amber' : 'green'} />
       </div>
 
-      {/* --- Grafici --- */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white rounded-xl p-5 shadow-sm lg:col-span-2">
           <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wide">
@@ -247,7 +273,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* --- Ultimi movimenti --- */}
       <div className="bg-white rounded-xl p-5 shadow-sm">
         <h2 className="font-semibold text-gray-700 mb-4 text-sm uppercase tracking-wide">
           Ultimi movimenti

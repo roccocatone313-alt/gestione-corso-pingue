@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Modal from '../components/Modal'
+import InfoBox from '../components/InfoBox'
 import { esportaExcel, esportaPDF } from '../lib/export'
 
 const TABS = [
@@ -190,6 +191,16 @@ export default function Admin() {
 
   return (
     <div className="space-y-4">
+      <InfoBox id="admin" titolo="Admin — pannello di controllo">
+        <p>Qui gestisci <strong>tutto</strong>: 5 tab (Movimenti, Sponsor, Acquisti, Budget, Scadenze).</p>
+        <p>• <strong>Cerca</strong> con la barra in alto</p>
+        <p>• <strong>Filtra per stato</strong> con il menu a tendina</p>
+        <p>• <strong>Modifica</strong> o <strong>Elimina</strong> ogni riga</p>
+        <p>• <strong>Cambia stato</strong> al volo (es. da "Approvato" a "Pagato")</p>
+        <p>I movimenti con badge <strong>auto</strong> sono generati da acquisti, sponsor o scadenze. Non si possono modificare da qui: modifica la loro origine.</p>
+        <p>In alto a destra esporti tutto in <strong>Excel o PDF</strong>.</p>
+      </InfoBox>
+
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-lg font-bold text-gray-800">Amministrazione</h2>

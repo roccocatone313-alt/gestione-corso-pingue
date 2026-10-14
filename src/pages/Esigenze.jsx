@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import Modal from '../components/Modal'
+import InfoBox from '../components/InfoBox'
 import {
   getEsigenze, creaEsigenza, aggiornaEsigenza, eliminaEsigenza,
   getSottoesigenze, creaSottoesigenza, aggiornaSottoesigenza, eliminaSottoesigenza,
@@ -55,9 +56,6 @@ export default function Esigenze() {
     setAperte(a => ({ ...a, [id]: !a[id] }))
   }
 
-  // ============================
-  // Esigenze
-  // ============================
   async function salvaNuovaEsigenza(titolo) {
     setSalvando(true)
     const r = await creaEsigenza(titolo)
@@ -93,9 +91,6 @@ export default function Esigenze() {
     mostraMsg('ok', 'Promossa a Budget.')
   }
 
-  // ============================
-  // Sottoesigenze
-  // ============================
   async function salvaNuovaSotto(titolo) {
     setSalvando(true)
     const r = await creaSottoesigenza(modalNuovaSotto.esigenzaId, titolo)
@@ -135,9 +130,6 @@ export default function Esigenze() {
     carica()
   }
 
-  // ============================
-  // Upload file
-  // ============================
   async function eseguiUpload() {
     if (!uploadModal || !uploadModal.file) {
       mostraMsg('errore', 'Seleziona un file.')
@@ -164,9 +156,6 @@ export default function Esigenze() {
     return documenti.filter(d => d.sottoesigenza_id === sottoId)
   }
 
-  // ============================
-  // Totali
-  // ============================
   function totaleEsigenza(esigenzaId) {
     return sotto
       .filter(s => s.esigenza_id === esigenzaId)
@@ -186,7 +175,15 @@ export default function Esigenze() {
 
   return (
     <div className="space-y-4">
-      {/* Intestazione */}
+      <InfoBox id="esigenze" titolo="Esigenze — il quaderno delle idee">
+        <p>Qui <strong>chiunque</strong> può scrivere cosa serve al corso. Non sono soldi spesi, sono cose da comprare o organizzare.</p>
+        <p>• Crea una <strong>voce</strong> (es. Recita, Cena, Tecnica)</p>
+        <p>• Dentro, aggiungi <strong>sotto-voci</strong> (es. Scenografie, Costumi)</p>
+        <p>• Clicca sull'importo <strong>€ ?</strong> per inserirlo. Se non lo sai, lascialo vuoto.</p>
+        <p>• Carica <strong>preventivi e PDF</strong> con il pulsante 📎</p>
+        <p>Quando una voce è pronta, il presidente la <strong>promuove a Budget</strong> (↑€) e diventa ufficiale.</p>
+      </InfoBox>
+
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-lg font-bold text-gray-800">Esigenze</h2>
@@ -202,7 +199,6 @@ export default function Esigenze() {
         </button>
       </div>
 
-      {/* Riepilogo globale */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div className="bg-white rounded-xl p-4 shadow-sm border-l-4 border-sky-500">
           <div className="text-xs uppercase tracking-wide text-gray-500">Totale esigenze</div>
@@ -233,7 +229,6 @@ export default function Esigenze() {
         </div>
       )}
 
-      {/* Lista */}
       {loading ? (
         <div className="text-center text-gray-400 italic py-10">Caricamento...</div>
       ) : esigenze.length === 0 ? (
@@ -251,7 +246,6 @@ export default function Esigenze() {
 
             return (
               <div key={e.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                {/* Header esigenza */}
                 <div className="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50"
                      onClick={() => toggleAperta(e.id)}>
                   <div className="w-10 h-10 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center font-bold shrink-0">
@@ -265,7 +259,6 @@ export default function Esigenze() {
                     </div>
                   </div>
 
-                  {/* Totale esigenza */}
                   <div className="text-right shrink-0 mr-2">
                     {daDefinire ? (
                       <div className="text-lg font-bold text-amber-600">
@@ -276,7 +269,6 @@ export default function Esigenze() {
                     )}
                   </div>
 
-                  {/* Azioni */}
                   <div className="flex items-center gap-1 shrink-0" onClick={ev => ev.stopPropagation()}>
                     <button
                       onClick={() => setModalRinomina({ dati: { ...e } })}
@@ -305,7 +297,6 @@ export default function Esigenze() {
                   </div>
                 </div>
 
-                {/* Body esigenza */}
                 {isOpen && (
                   <div className="border-t border-gray-100 p-4 bg-gray-50/50 space-y-2">
                     {figlie.length === 0 && (
@@ -329,7 +320,6 @@ export default function Esigenze() {
                               )}
                             </div>
 
-                            {/* Importo cliccabile */}
                             <button
                               onClick={() => setModalImporto({
                                 dati: {
@@ -373,7 +363,6 @@ export default function Esigenze() {
                             </div>
                           </div>
 
-                          {/* File allegati */}
                           {d.length > 0 && (
                             <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
                               {d.map(doc => (
@@ -404,7 +393,6 @@ export default function Esigenze() {
                       )
                     })}
 
-                    {/* Totale parziale dell'esigenza */}
                     {figlie.length > 0 && (
                       <div className="flex justify-between items-center px-3 py-2 bg-gray-100 rounded-lg">
                         <span className="text-xs uppercase tracking-wide text-gray-600 font-semibold">
@@ -430,7 +418,6 @@ export default function Esigenze() {
         </div>
       )}
 
-      {/* Totale generale */}
       {!loading && sotto.length > 0 && (
         <div className="bg-gradient-to-br from-sky-800 to-sky-900 rounded-xl p-6 shadow-md text-white">
           <div className="flex justify-between items-center flex-wrap gap-3">
@@ -449,7 +436,6 @@ export default function Esigenze() {
         </div>
       )}
 
-      {/* MODALE NUOVA ESIGENZA */}
       {modalNuova && (
         <Modal
           titolo="Nuova esigenza"
@@ -471,7 +457,6 @@ export default function Esigenze() {
         </Modal>
       )}
 
-      {/* MODALE RINOMINA ESIGENZA */}
       {modalRinomina && (
         <Modal
           titolo="Rinomina esigenza"
@@ -492,7 +477,6 @@ export default function Esigenze() {
         </Modal>
       )}
 
-      {/* MODALE NUOVA SOTTOESIGENZA */}
       {modalNuovaSotto && (
         <Modal
           titolo="Nuova sotto-esigenza"
@@ -514,7 +498,6 @@ export default function Esigenze() {
         </Modal>
       )}
 
-      {/* MODALE RINOMINA SOTTOESIGENZA */}
       {modalRinominaSotto && (
         <Modal
           titolo="Rinomina sotto-esigenza"
@@ -535,7 +518,6 @@ export default function Esigenze() {
         </Modal>
       )}
 
-      {/* MODALE IMPORTO */}
       {modalImporto && (
         <Modal
           titolo={`Importo — ${modalImporto.dati.titolo}`}
@@ -579,7 +561,6 @@ export default function Esigenze() {
         </Modal>
       )}
 
-      {/* MODALE UPLOAD */}
       {uploadModal && (
         <Modal
           titolo={`Carica file — ${uploadModal.titolo}`}

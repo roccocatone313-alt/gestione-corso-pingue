@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import InfoBox from '../components/InfoBox'
 
 const TABS = [
   { id: 'movimento', label: 'Movimento' },
@@ -175,7 +176,6 @@ export default function Inserisci() {
     setSc({ ...sc, descrizione: '', importo: '', responsabile: '', note: '' })
   }
 
-  // BUDGET
   const [bud, setBud] = useState({
     voce: '', categoria: 'Materiale', preventivato: '',
     cellula: 'Budget', fornitore_previsto: '',
@@ -207,6 +207,16 @@ export default function Inserisci() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
+      <InfoBox id="inserisci" titolo="Inserisci — registra tutto da qui">
+        <p>Questo è il <strong>cassetto degli attrezzi</strong>. 5 tab per registrare qualsiasi cosa velocemente.</p>
+        <p>• <strong>Movimento</strong> — soldi che entrano o escono, quando non c'è un acquisto a monte</p>
+        <p>• <strong>Sponsor</strong> — un nuovo possibile finanziatore</p>
+        <p>• <strong>Acquisto</strong> — stai ordinando qualcosa</p>
+        <p>• <strong>Scadenza</strong> — una data importante (pagamento, incasso, rinnovo)</p>
+        <p>• <strong>Budget</strong> — una nuova voce di spesa pianificata</p>
+        <p>Quando un acquisto diventa "Pagato" o uno sponsor "Incassato", il movimento contabile <strong>si crea da solo</strong>. Non duplicarlo a mano.</p>
+      </InfoBox>
+
       <div className="bg-white rounded-xl p-2 shadow-sm flex flex-wrap gap-1">
         {TABS.map(t => (
           <button
