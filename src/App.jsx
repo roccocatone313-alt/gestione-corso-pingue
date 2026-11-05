@@ -6,6 +6,7 @@ import Admin from './pages/Admin'
 import Sponsor from './pages/Sponsor'
 import Budget from './pages/Budget'
 import Esigenze from './pages/Esigenze'
+import Rendiconto from './pages/Rendiconto'
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="sponsor" element={<Sponsor />} />
           <Route path="budget" element={<Budget />} />
+          <Route path="rendiconto" element={<Rendiconto />} />
           <Route path="esigenze" element={<Esigenze />} />
           <Route path="inserisci" element={<Inserisci />} />
           <Route path="admin" element={<Admin />} />
