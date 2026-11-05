@@ -47,10 +47,13 @@ function num(v) {
   return Number.isFinite(n) ? n : 0
 }
 
+// Formato italiano con il punto delle migliaia sempre presente
+// (toLocaleString non lo mette sotto i 10.000: "1220,00" invece di "1.220,00").
 function euro(n) {
-  return '€ ' + num(n).toLocaleString('it-IT', {
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
-  })
+  const v = num(n)
+  const [intero, decimali] = Math.abs(v).toFixed(2).split('.')
+  const segno = v < 0 && Math.abs(v) >= 0.005 ? '-' : ''
+  return '€ ' + segno + intero.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + decimali
 }
 
 function dataIt(d) {
