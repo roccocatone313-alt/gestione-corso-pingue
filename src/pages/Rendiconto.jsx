@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { MACRO_SEZIONI, sezioneValida } from '../lib/macroSezioni'
 import { dataMovimentoCollegato } from '../lib/dateCassa'
+import { useAuth } from '../lib/auth'
 import CONFIG from '../data/rendiconto.json'
 
 // Paganti e quota per allievo si cambiano in src/data/rendiconto.json
@@ -460,6 +461,9 @@ export default function Rendiconto() {
   const [modifica, setModifica] = useState(false)
   const [salvando, setSalvando] = useState(null)
   const [msg, setMsg] = useState(null)
+  const { puoModificare } = useAuth()
+  // Lo spostamento delle spese è solo per chi può modificare
+  const inModifica = modifica && puoModificare
 
   async function carica() {
     setErrore(null)
@@ -563,12 +567,14 @@ export default function Rendiconto() {
                   className="px-3 py-2 rounded-lg text-sm font-semibold bg-sky-500 text-white hover:bg-sky-600">
             Stampa / PDF
           </button>
-          <button type="button" onClick={attivaModifica}
-                  className={`px-3 py-2 rounded-lg text-sm font-semibold border ${modifica
-                    ? 'bg-amber-100 border-amber-300 text-amber-900'
-                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
-            {modifica ? 'Fine spostamento' : 'Sposta spese'}
-          </button>
+          {puoModificare && (
+            <button type="button" onClick={attivaModifica}
+                    className={`px-3 py-2 rounded-lg text-sm font-semibold border ${inModifica
+                      ? 'bg-amber-100 border-amber-300 text-amber-900'
+                      : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
+              {inModifica ? 'Fine spostamento' : 'Sposta spese'}
+            </button>
+          )}
         </div>
       </header>
 
@@ -673,7 +679,7 @@ export default function Rendiconto() {
             {tutteAperte ? 'Chiudi tutte' : 'Apri tutte'}
           </button>
         </div>
-        {modifica && (
+        {inModifica && (
           <div className="no-print mb-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900">
             Usa il menu nella colonna "Sezione" per spostare una spesa. Il cambio si salva subito.
           </div>
@@ -683,7 +689,7 @@ export default function Rendiconto() {
             <SezioneCard key={s.nome} sezione={s}
                          aperta={!!aperte[s.nome]}
                          onToggle={() => toggle(s.nome)}
-                         modifica={modifica}
+                         modifica={inModifica}
                          onSposta={sposta}
                          salvando={salvando} />
           ))}

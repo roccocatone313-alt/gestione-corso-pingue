@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import { useAuth } from '../lib/auth'
 
 function linkClass({ isActive }) {
   const base = 'px-3 py-2 rounded-lg text-sm font-semibold transition'
@@ -8,6 +9,8 @@ function linkClass({ isActive }) {
 }
 
 export default function Layout() {
+  const { utente, puoModificare, esci } = useAuth()
+
   return (
     <div className="min-h-screen">
       <nav className="bg-white shadow-sm sticky top-0 z-10 border-b-4 border-sky-500">
@@ -25,14 +28,31 @@ export default function Layout() {
               </p>
             </div>
           </div>
-          <div className="flex gap-1 flex-wrap">
+          <div className="flex gap-1 flex-wrap items-center">
             <NavLink to="/" end className={linkClass}>Panoramica</NavLink>
             <NavLink to="/sponsor" className={linkClass}>Sponsor</NavLink>
             <NavLink to="/budget" className={linkClass}>Budget</NavLink>
             <NavLink to="/rendiconto" className={linkClass}>Rendiconto</NavLink>
             <NavLink to="/esigenze" className={linkClass}>Esigenze</NavLink>
-            <NavLink to="/inserisci" className={linkClass}>Inserisci</NavLink>
-            <NavLink to="/admin" className={linkClass}>Admin</NavLink>
+            {puoModificare && (
+              <>
+                <NavLink to="/inserisci" className={linkClass}>Inserisci</NavLink>
+                <NavLink to="/admin" className={linkClass}>Admin</NavLink>
+              </>
+            )}
+            {utente ? (
+              <div className="flex items-center gap-2 pl-2 ml-1 border-l border-gray-200">
+                <span className="text-xs text-gray-500 max-w-[160px] truncate" title={utente.email}>
+                  {utente.email}
+                </span>
+                <button type="button" onClick={esci}
+                        className="px-3 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100 transition">
+                  Esci
+                </button>
+              </div>
+            ) : (
+              <NavLink to="/login" className={linkClass}>Accedi</NavLink>
+            )}
           </div>
         </div>
       </nav>
