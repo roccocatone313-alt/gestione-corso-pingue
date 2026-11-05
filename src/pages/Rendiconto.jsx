@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import macroData from '../data/macro-sezioni.json'
-import patrimonioData from '../data/patrimonio.json'
 
 const MACRO_ORDINE = [
   'RECITA', 'SERATA DANZANTE', 'CATERING',
@@ -20,21 +19,28 @@ function deltaClass(d) {
   return 'text-gray-500'
 }
 
+function isFido(nome) {
+  return /fido/i.test(nome || '')
+}
+
 export default function Rendiconto() {
   const [budget, setBudget] = useState([])
   const [movimenti, setMovimenti] = useState([])
+  const [sponsor, setSponsor] = useState([])
   const [loading, setLoading] = useState(true)
   const [aperte, setAperte] = useState({})
 
   useEffect(() => {
     async function carica() {
       setLoading(true)
-      const [b, m] = await Promise.all([
+      const [b, m, sp] = await Promise.all([
         supabase.from('budget').select('*'),
-        supabase.from('movimenti').select('tipo, categoria, importo').eq('tipo', 'Uscita'),
+        supabase.from('movimenti').select('*'),
+        supabase.from('sponsor').select('*'),
       ])
       setBudget(b.data || [])
       setMovimenti(m.data || [])
+      setSponsor(sp.data || [])
       setLoading(false)
     }
     carica()
@@ -42,7 +48,7 @@ export default function Rendiconto() {
 
   function spesoPerVoce(nomeVoce) {
     return movimenti
-      .filter(m => m.categoria === nomeVoce)
+      .filter(m => m.tipo === 'Uscita' && m.categoria === nomeVoce)
       .reduce((s, m) => s + (Number(m.importo) || 0), 0)
   }
 
@@ -61,6 +67,37 @@ export default function Rendiconto() {
   const totPreventivo = budget.reduce((s, b) => s + (Number(b.preventivato) || 0), 0)
   const totSpeso = budget.reduce((s, b) => s + spesoPerVoce(b.voce), 0)
   const saldo = totPreventivo - totSpeso
+
+  // === PATRIMONIO AUTOMATICO ===
+  const entrateAllievi = movimenti
+    .filter(m => m.tipo === 'Entrata' && m.categoria !== 'Sponsor')
+    .reduce((s, m) => s + (Number(m.importo) || 0), 0)
+
+  const sponsorFido = sponsor.filter(s => isFido(s.nome))
+  const sponsorNoFido = sponsor.filter(s => !isFido(s.nome))
+
+  const patrimonio = [
+    {
+      voce: 'Soldi allievi',
+      importoPrevisto: null,
+      importoConfermato: entrateAllievi,
+      note: 'Entrate in movimenti con categoria diversa da "Sponsor"',
+    },
+    {
+      voce: 'Sponsor',
+      importoPrevisto: sponsorNoFido.reduce((s, x) => s + (Number(x.importo_promesso) || 0), 0),
+      importoConfermato: sponsorNoFido.reduce((s, x) => s + (Number(x.importo_incassato) || 0), 0),
+      note: 'Dalla tabella sponsor (escluso FIDO)',
+    },
+    {
+      voce: 'FIDO (Fondazione Italiana per il Dono)',
+      importoPrevisto: sponsorFido.reduce((s, x) => s + (Number(x.importo_promesso) || 0), 0),
+      importoConfermato: sponsorFido.reduce((s, x) => s + (Number(x.importo_incassato) || 0), 0),
+      note: sponsorFido.length === 0
+        ? 'Nessuno sponsor con "FIDO" nel nome: registralo nella pagina Sponsor'
+        : 'Sponsor con "FIDO" nel nome',
+    },
+  ]
 
   function toggle(s) {
     setAperte(a => ({ ...a, [s]: !a[s] }))
@@ -93,22 +130,24 @@ export default function Rendiconto() {
       <div className="bg-white rounded-xl p-5 shadow-sm">
         <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-3">Patrimonio</h3>
         <div className="space-y-3">
-          {patrimonioData.length === 0 && (
-            <div className="text-xs text-gray-400 italic">Nessun dato patrimonio.</div>
-          )}
-          {patrimonioData.map(p => {
+          {patrimonio.map(p => {
             const prev = Number(p.importoPrevisto) || 0
             const conf = Number(p.importoConfermato) || 0
-            const pct = prev > 0 ? Math.min((conf / prev) * 100, 100) : 0
+            const hasPrev = p.importoPrevisto !== null && prev > 0
+            const pct = hasPrev ? Math.min((conf / prev) * 100, 100) : 0
             return (
               <div key={p.voce}>
                 <div className="flex justify-between text-sm">
                   <span className="font-semibold text-gray-800">{p.voce}</span>
-                  <span className="text-gray-600">{euro(conf)} / {euro(prev)}</span>
+                  <span className="text-gray-600">
+                    {hasPrev ? `${euro(conf)} / ${euro(prev)}` : euro(conf)}
+                  </span>
                 </div>
-                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mt-1">
-                  <div className="h-full bg-sky-500" style={{ width: pct + '%' }} />
-                </div>
+                {hasPrev && (
+                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mt-1">
+                    <div className="h-full bg-sky-500" style={{ width: pct + '%' }} />
+                  </div>
+                )}
                 {p.note && <div className="text-xs text-gray-500 mt-1">{p.note}</div>}
               </div>
             )
@@ -196,7 +235,7 @@ export default function Rendiconto() {
       </div>
 
       <div className="text-center text-xs text-gray-400 py-4">
-        {macroData?._aggiornatoIl ? `Ultimo aggiornamento: ${macroData._aggiornatoIl}` : ''}
+        {macroData?._aggiornatoIl ? `Dati calcolati automaticamente dalle tabelle Supabase` : ''}
       </div>
     </div>
   )
