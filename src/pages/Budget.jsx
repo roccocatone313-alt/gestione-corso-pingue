@@ -11,6 +11,10 @@ const CELLULE   = ['Sponsor', 'Budget', 'Acquisti']
 const CATEGORIE = ['Sponsor','Materiale','Trasporti','Eventi','Cancelleria','Rimborsi','Altro']
 const STATI     = ['Pianificato', 'In corso', 'Completato', 'Annullato']
 const TIPI_DOC  = ['fattura', 'preventivo', 'ricevuta', 'contratto', 'altro']
+const MACRO_SEZIONI = [
+  'RECITA', 'SERATA DANZANTE', 'CATERING',
+  'SMALTIMENTO RIFIUTI', 'SPINGUINATURA', 'ALTRO',
+]
 
 const inputClass =
   'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500'
@@ -117,6 +121,16 @@ export default function Budget() {
       .reduce((s, m) => s + (Number(m.importo) || 0), 0)
   }
 
+  async function cambiaMacro(id, valore) {
+    const { error } = await supabase
+      .from('budget')
+      .update({ macro_sezione: valore })
+      .eq('id', id)
+    if (error) { mostraMsg('errore', error.message); return }
+    setBudget(lista => lista.map(x => x.id === id ? { ...x, macro_sezione: valore } : x))
+    mostraMsg('ok', 'Macro-sezione: ' + valore)
+  }
+
   function apriModifica(voce) {
     setModal({ dati: { ...voce } })
   }
@@ -127,6 +141,7 @@ export default function Budget() {
         voce: '', categoria: 'Materiale', preventivato: '',
         cellula: 'Budget', fornitore_previsto: '',
         data_prevista: '', stato: 'Pianificato', note: '',
+        macro_sezione: 'ALTRO',
       }
     })
   }
@@ -153,6 +168,7 @@ export default function Budget() {
       data_prevista: d.data_prevista || null,
       stato: d.stato,
       note: (d.note || '').trim() || null,
+      macro_sezione: d.macro_sezione || 'ALTRO',
     }
 
     let error
@@ -225,7 +241,7 @@ export default function Budget() {
         <p>• <strong>Speso</strong>: quanto hai speso davvero (si calcola da solo dai movimenti)</p>
         <p>• <strong>Disponibile</strong>: la differenza</p>
         <p>La barra colorata mostra l'avanzamento: verde ok, gialla attenzione, rossa hai sforato.</p>
-        <p>I tab in alto filtrano per cellula. Puoi caricare <strong>fatture e preventivi</strong> da ogni voce.</p>
+        <p>Ogni voce appartiene a una <strong>macro-sezione</strong> (Recita, Serata danzante, ...): puoi cambiarla dalla card con il menu a tendina.</p>
       </InfoBox>
 
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -342,6 +358,19 @@ export default function Budget() {
                   </div>
                 </div>
 
+                <div className="flex items-center gap-2 flex-wrap text-xs">
+                  <span className="text-gray-500 font-semibold uppercase">Macro-sezione:</span>
+                  <select
+                    value={b.macro_sezione || 'ALTRO'}
+                    onChange={e => cambiaMacro(b.id, e.target.value)}
+                    className="text-xs border border-gray-300 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500"
+                  >
+                    {MACRO_SEZIONI.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+
                 {(b.fornitore_previsto || b.data_prevista) && (
                   <div className="flex flex-wrap gap-3 text-xs text-gray-500">
                     {b.fornitore_previsto && (
@@ -421,6 +450,13 @@ export default function Budget() {
               </select>
             </Field>
           </div>
+          <Field label="Macro-sezione (per il Rendiconto pubblico)">
+            <select value={modal.dati.macro_sezione || 'ALTRO'}
+                    onChange={e => setCampo('macro_sezione', e.target.value)}
+                    className={inputClass}>
+              {MACRO_SEZIONI.map(m => <option key={m}>{m}</option>)}
+            </select>
+          </Field>
           <Field label="Preventivato (€) *">
             <input type="number" step="0.01" min="0.01" value={modal.dati.preventivato || ''}
                    onChange={e => setCampo('preventivato', e.target.value)}
