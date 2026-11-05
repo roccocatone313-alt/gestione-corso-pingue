@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import InfoBox from '../components/InfoBox'
+import { MACRO_SEZIONI } from '../lib/macroSezioni'
 
 const TABS = [
   { id: 'movimento', label: 'Movimento' },
@@ -11,6 +12,8 @@ const TABS = [
 ]
 
 const CATEGORIE = ['Sponsor','Materiale','Trasporti','Eventi','Cancelleria','Rimborsi','Altro']
+// Per i movimenti: quote degli allievi e soldi arrivati tramite F.I.Do
+const CATEGORIE_MOVIMENTO = ['Quote allievi', 'F.I.Do', ...CATEGORIE]
 const CELLULE   = ['Sponsor','Budget','Acquisti']
 const STATI_SPONSOR  = ['Prospect','In trattativa','Confermato','Incassato','Perso']
 const STATI_ACQUISTO = ['Da approvare','Approvato','Ordinato','Ricevuto','Pagato','Rifiutato']
@@ -55,6 +58,7 @@ export default function Inserisci() {
   const [mov, setMov] = useState({
     data: oggi(), tipo: 'Entrata', importo: '', categoria: 'Sponsor',
     cellula: 'Sponsor', descrizione: '', riferimento: '',
+    macro_sezione: 'ALTRO',
   })
 
   async function salvaMovimento(e) {
@@ -68,6 +72,7 @@ export default function Inserisci() {
       cellula: mov.cellula,
       descrizione: mov.descrizione,
       riferimento: mov.riferimento,
+      macro_sezione: mov.tipo === 'Uscita' ? mov.macro_sezione : null,
       created_by: 'web',
     })
     setInvio(false)
@@ -95,7 +100,7 @@ export default function Inserisci() {
       importo_incassato: Number(sp.importo_incassato) || 0,
       stato: sp.stato,
       data_accordo: sp.data_accordo || null,
-      data_incasso: sp.data_incasso || null,
+      data_incasso: sp.data_incasso || (sp.stato === 'Incassato' ? oggi() : null),
       note: sp.note.trim(),
       created_by: 'web',
     })
@@ -112,7 +117,7 @@ export default function Inserisci() {
 
   const [ac, setAc] = useState({
     data_richiesta: oggi(), richiedente: '', descrizione: '', fornitore: '',
-    categoria: 'Materiale',
+    categoria: 'Materiale', macro_sezione: 'ALTRO',
     importo_previsto: '', importo_effettivo: '',
     stato: 'Da approvare', data_ordine: '', data_pagamento: '', note: '',
   })
@@ -134,7 +139,8 @@ export default function Inserisci() {
       importo_effettivo: ac.importo_effettivo ? Number(ac.importo_effettivo) : null,
       stato: ac.stato,
       data_ordine: ac.data_ordine || null,
-      data_pagamento: ac.data_pagamento || null,
+      data_pagamento: ac.data_pagamento || (ac.stato === 'Pagato' ? oggi() : null),
+      macro_sezione: ac.macro_sezione,
       note: ac.note.trim(),
       created_by: 'web',
     })
@@ -267,7 +273,7 @@ export default function Inserisci() {
               <select value={mov.categoria}
                       onChange={e => setMov({ ...mov, categoria: e.target.value })}
                       className={inputClass}>
-                {CATEGORIE.map(c => <option key={c}>{c}</option>)}
+                {CATEGORIE_MOVIMENTO.map(c => <option key={c}>{c}</option>)}
               </select>
             </Field>
             <Field label="Cellula">
@@ -278,6 +284,15 @@ export default function Inserisci() {
               </select>
             </Field>
           </div>
+          {mov.tipo === 'Uscita' && (
+            <Field label="Sezione del rendiconto">
+              <select value={mov.macro_sezione}
+                      onChange={e => setMov({ ...mov, macro_sezione: e.target.value })}
+                      className={inputClass}>
+                {MACRO_SEZIONI.map(s => <option key={s}>{s}</option>)}
+              </select>
+            </Field>
+          )}
           <Field label="Descrizione">
             <textarea rows={2} value={mov.descrizione}
                       onChange={e => setMov({ ...mov, descrizione: e.target.value })}
@@ -401,6 +416,13 @@ export default function Inserisci() {
                     onChange={e => setAc({ ...ac, categoria: e.target.value })}
                     className={inputClass}>
               {CATEGORIE.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="Sezione del rendiconto">
+            <select value={ac.macro_sezione}
+                    onChange={e => setAc({ ...ac, macro_sezione: e.target.value })}
+                    className={inputClass}>
+              {MACRO_SEZIONI.map(s => <option key={s}>{s}</option>)}
             </select>
           </Field>
           <div className="grid grid-cols-2 gap-3">

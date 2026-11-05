@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Modal from '../components/Modal'
 import InfoBox from '../components/InfoBox'
+import { dataMovimentoCollegato, oggiISO } from '../lib/dateCassa'
 
 const COLONNE = [
   { stato: 'Prospect',      colore: 'bg-gray-50',   bordo: 'border-gray-300',  testo: 'text-gray-700',   totale: 'text-gray-800' },
@@ -96,9 +97,16 @@ export default function Sponsor() {
       const ok = confirm('Impostare come "Incassato" creerà automaticamente un movimento Entrata. Confermi?')
       if (!ok) return
     }
-    const { error } = await supabase.from('sponsor').update({ stato: nuovoStato }).eq('id', id)
+    const campi = { stato: nuovoStato }
+    // Senza data di incasso la metto a oggi: così le modifiche successive
+    // non spostano la data del movimento di cassa.
+    if (nuovoStato === 'Incassato') {
+      const s = sponsor.find(x => x.id === id)
+      if (s && !s.data_incasso) campi.data_incasso = oggiISO()
+    }
+    const { error } = await supabase.from('sponsor').update(campi).eq('id', id)
     if (error) { mostraMsg('errore', error.message); return }
-    setSponsor(lista => lista.map(s => s.id === id ? { ...s, stato: nuovoStato } : s))
+    setSponsor(lista => lista.map(s => s.id === id ? { ...s, ...campi } : s))
     mostraMsg('ok', 'Stato aggiornato: ' + nuovoStato)
   }
 
@@ -150,6 +158,12 @@ export default function Sponsor() {
       data_accordo: d.data_accordo || null,
       data_incasso: d.data_incasso || null,
       note: (d.note || '').trim(),
+    }
+
+    // Sponsor incassato senza data: uso la data del movimento di cassa già
+    // registrato (o oggi), così il database non la sposta.
+    if (payload.stato === 'Incassato' && !payload.data_incasso) {
+      payload.data_incasso = (d.id && await dataMovimentoCollegato('Sponsor #' + d.id)) || oggiISO()
     }
 
     let error

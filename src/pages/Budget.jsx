@@ -6,15 +6,12 @@ import {
   caricaFile, urlFile, eliminaFile, getDocumentiBudget,
   formattaDimensione, iconaFile
 } from '../lib/storage'
+import { MACRO_SEZIONI } from '../lib/macroSezioni'
 
 const CELLULE   = ['Sponsor', 'Budget', 'Acquisti']
 const CATEGORIE = ['Sponsor','Materiale','Trasporti','Eventi','Cancelleria','Rimborsi','Altro']
 const STATI     = ['Pianificato', 'In corso', 'Completato', 'Annullato']
 const TIPI_DOC  = ['fattura', 'preventivo', 'ricevuta', 'contratto', 'altro']
-const MACRO_SEZIONI = [
-  'RECITA', 'SERATA DANZANTE', 'CATERING',
-  'SMALTIMENTO RIFIUTI', 'SPINGUINATURA', 'ALTRO',
-]
 
 const inputClass =
   'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500'

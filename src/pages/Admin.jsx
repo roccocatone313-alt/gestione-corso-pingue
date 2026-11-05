@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase'
 import Modal from '../components/Modal'
 import InfoBox from '../components/InfoBox'
 import { esportaExcel, esportaPDF } from '../lib/export'
+import { MACRO_SEZIONI } from '../lib/macroSezioni'
+import { dataMovimentoCollegato, oggiISO } from '../lib/dateCassa'
 
 const TABS = [
   { id: 'movimenti', label: 'Movimenti' },
@@ -13,6 +15,8 @@ const TABS = [
 ]
 
 const CATEGORIE      = ['Sponsor','Materiale','Trasporti','Eventi','Cancelleria','Rimborsi','Altro']
+// Per i movimenti: quote degli allievi e soldi arrivati tramite F.I.Do
+const CATEGORIE_MOVIMENTO = ['Quote allievi', 'F.I.Do', ...CATEGORIE]
 const CELLULE        = ['Sponsor','Budget','Acquisti']
 const STATI_SPONSOR  = ['Prospect','In trattativa','Confermato','Incassato','Perso']
 const STATI_ACQUISTO = ['Da approvare','Approvato','Ordinato','Ricevuto','Pagato','Rifiutato']
@@ -144,7 +148,19 @@ export default function Admin() {
     }
     if (messaggioConferma && !confirm(messaggioConferma)) return
 
-    const { error } = await supabase.from(tipo).update({ [campo]: valore }).eq('id', id)
+    const campi = { [campo]: valore }
+    // Data di pagamento/incasso mancante: la metto a oggi, così le modifiche
+    // successive non spostano la data del movimento di cassa.
+    if (tipo === 'acquisti' && valore === 'Pagato') {
+      const r = acquisti.find(x => x.id === id)
+      if (r && !r.data_pagamento) campi.data_pagamento = oggiISO()
+    }
+    if (tipo === 'sponsor' && valore === 'Incassato') {
+      const r = sponsor.find(x => x.id === id)
+      if (r && !r.data_incasso) campi.data_incasso = oggiISO()
+    }
+
+    const { error } = await supabase.from(tipo).update(campi).eq('id', id)
     if (error) { mostraMsg('errore', error.message); return }
     caricaTutto()
   }
@@ -162,6 +178,15 @@ export default function Admin() {
     Object.keys(payload).forEach(k => {
       if (payload[k] === '') payload[k] = null
     })
+
+    // Acquisto pagato / sponsor incassato senza data: uso la data del movimento
+    // di cassa già registrato (o oggi), così il database non la sposta.
+    if (tipo === 'acquisti' && payload.stato === 'Pagato' && !payload.data_pagamento) {
+      payload.data_pagamento = (await dataMovimentoCollegato('Acquisto #' + id)) || oggiISO()
+    }
+    if (tipo === 'sponsor' && payload.stato === 'Incassato' && !payload.data_incasso) {
+      payload.data_incasso = (await dataMovimentoCollegato('Sponsor #' + id)) || oggiISO()
+    }
 
     const { error } = await supabase.from(tipo).update(payload).eq('id', id)
     setSalvando(false)
@@ -626,7 +651,7 @@ export default function Admin() {
                 <Field label="Categoria">
                   <select value={modal.dati.categoria || ''}
                           onChange={e => setCampo('categoria', e.target.value)} className={inputClass}>
-                    {CATEGORIE.map(c => <option key={c}>{c}</option>)}
+                    {CATEGORIE_MOVIMENTO.map(c => <option key={c}>{c}</option>)}
                   </select>
                 </Field>
                 <Field label="Cellula">
@@ -636,6 +661,14 @@ export default function Admin() {
                   </select>
                 </Field>
               </div>
+              {modal.dati.tipo === 'Uscita' && (
+                <Field label="Sezione del rendiconto">
+                  <select value={modal.dati.macro_sezione || 'ALTRO'}
+                          onChange={e => setCampo('macro_sezione', e.target.value)} className={inputClass}>
+                    {MACRO_SEZIONI.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </Field>
+              )}
               <Field label="Descrizione">
                 <textarea rows={2} value={modal.dati.descrizione || ''}
                           onChange={e => setCampo('descrizione', e.target.value)} className={inputClass} />
@@ -724,6 +757,12 @@ export default function Admin() {
                 <select value={modal.dati.categoria || 'Materiale'}
                         onChange={e => setCampo('categoria', e.target.value)} className={inputClass}>
                   {CATEGORIE.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </Field>
+              <Field label="Sezione del rendiconto">
+                <select value={modal.dati.macro_sezione || 'ALTRO'}
+                        onChange={e => setCampo('macro_sezione', e.target.value)} className={inputClass}>
+                  {MACRO_SEZIONI.map(s => <option key={s}>{s}</option>)}
                 </select>
               </Field>
               <div className="grid grid-cols-2 gap-3">
