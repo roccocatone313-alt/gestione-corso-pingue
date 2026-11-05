@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Modal from '../components/Modal'
+import PagamentiAcquisto from '../components/PagamentiAcquisto'
 import InfoBox from '../components/InfoBox'
 import { esportaExcel, esportaPDF } from '../lib/export'
 import { MACRO_SEZIONI } from '../lib/macroSezioni'
@@ -10,8 +11,6 @@ const TABS = [
   { id: 'movimenti', label: 'Movimenti' },
   { id: 'sponsor',   label: 'Sponsor' },
   { id: 'acquisti',  label: 'Acquisti' },
-  { id: 'budget',    label: 'Budget' },
-  { id: 'scadenze',  label: 'Scadenze' },
 ]
 
 const CATEGORIE      = ['Sponsor','Materiale','Trasporti','Eventi','Cancelleria','Rimborsi','Altro']
@@ -20,9 +19,6 @@ const CATEGORIE_MOVIMENTO = ['Quote allievi', 'F.I.Do', ...CATEGORIE]
 const CELLULE        = ['Sponsor','Budget','Acquisti']
 const STATI_SPONSOR  = ['Prospect','In trattativa','Confermato','Incassato','Perso']
 const STATI_ACQUISTO = ['Da approvare','Approvato','Ordinato','Ricevuto','Pagato','Rifiutato']
-const TIPI_SCADENZA  = ['Pagamento','Incasso','Contratto','Rinnovo','Rimborso','Altro']
-const STATI_SCADENZA = ['Da fare','In corso','Completata','Annullata']
-const STATI_BUDGET   = ['Pianificato','In corso','Completato','Annullato']
 
 const inputClass =
   'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500'
@@ -88,8 +84,8 @@ export default function Admin() {
   const [movimenti, setMovimenti] = useState([])
   const [sponsor, setSponsor] = useState([])
   const [acquisti, setAcquisti] = useState([])
-  const [budget, setBudget] = useState([])
-  const [scadenze, setScadenze] = useState([])
+  const [pagamenti, setPagamenti] = useState([])
+  const [pagamentiDi, setPagamentiDi] = useState(null)
 
   const [filtro, setFiltro] = useState('')
   const [filtroStato, setFiltroStato] = useState('')
@@ -104,18 +100,16 @@ export default function Admin() {
 
   async function caricaTutto() {
     setLoading(true)
-    const [a, b, c, d, e] = await Promise.all([
+    const [a, b, c, d] = await Promise.all([
       supabase.from('movimenti').select('*').order('data', { ascending: false }),
       supabase.from('sponsor').select('*').order('id', { ascending: false }),
       supabase.from('acquisti').select('*').order('id', { ascending: false }),
-      supabase.from('budget').select('*').order('voce'),
-      supabase.from('scadenze').select('*').order('data', { ascending: true }),
+      supabase.from('pagamenti_acquisti').select('*').order('data', { ascending: true }),
     ])
     setMovimenti(a.data || [])
     setSponsor(b.data || [])
     setAcquisti(c.data || [])
-    setBudget(d.data || [])
-    setScadenze(e.data || [])
+    setPagamenti(d.data || [])
     setLoading(false)
   }
 
@@ -123,14 +117,18 @@ export default function Admin() {
   useEffect(() => { setFiltro(''); setFiltroStato('') }, [tab])
 
   function handleExportExcel() {
-    esportaExcel({ movimenti, sponsor, acquisti, budget, scadenze })
+    esportaExcel({ movimenti, sponsor, acquisti, pagamenti })
   }
   function handleExportPDF() {
-    esportaPDF({ movimenti, sponsor, acquisti, budget, scadenze })
+    esportaPDF({ movimenti, sponsor, acquisti, pagamenti })
   }
 
   async function elimina(tipo, id) {
-    if (!confirm('Eliminare questa voce? Operazione irreversibile.')) return
+    const conRate = tipo === 'acquisti' && pagamenti.some(p => p.acquisto_id === id)
+    const domanda = conRate
+      ? "Eliminare l'acquisto? Verranno cancellate anche le sue rate e i movimenti di cassa collegati. Operazione irreversibile."
+      : 'Eliminare questa voce? Operazione irreversibile.'
+    if (!confirm(domanda)) return
     const { error } = await supabase.from(tipo).delete().eq('id', id)
     if (error) { mostraMsg('errore', error.message); return }
     mostraMsg('ok', 'Eliminato.')
@@ -140,11 +138,9 @@ export default function Admin() {
   async function cambiaStato(tipo, id, campo, valore) {
     let messaggioConferma = null
     if (tipo === 'acquisti' && valore === 'Pagato') {
-      messaggioConferma = 'Impostare come "Pagato" creerà automaticamente un movimento Uscita. Confermi?'
+      messaggioConferma = 'Impostare come "Pagato" creerà automaticamente il movimento di Uscita del saldo (totale meno le rate già pagate). Confermi?'
     } else if (tipo === 'sponsor' && valore === 'Incassato') {
       messaggioConferma = 'Impostare come "Incassato" creerà automaticamente un movimento Entrata. Confermi?'
-    } else if (tipo === 'scadenze' && valore === 'Completata') {
-      messaggioConferma = 'Impostare come "Completata" creerà automaticamente un movimento contabile (se il tipo è Pagamento, Incasso o Rimborso). Confermi?'
     }
     if (messaggioConferma && !confirm(messaggioConferma)) return
 
@@ -217,12 +213,13 @@ export default function Admin() {
   return (
     <div className="space-y-4">
       <InfoBox id="admin" titolo="Admin — pannello di controllo">
-        <p>Qui gestisci <strong>tutto</strong>: 5 tab (Movimenti, Sponsor, Acquisti, Budget, Scadenze).</p>
+        <p>Qui gestisci <strong>tutto</strong>: 3 schede (Movimenti, Sponsor, Acquisti).</p>
         <p>• <strong>Cerca</strong> con la barra in alto</p>
         <p>• <strong>Filtra per stato</strong> con il menu a tendina</p>
         <p>• <strong>Modifica</strong> o <strong>Elimina</strong> ogni riga</p>
         <p>• <strong>Cambia stato</strong> al volo (es. da "Approvato" a "Pagato")</p>
-        <p>I movimenti con badge <strong>auto</strong> sono generati da acquisti, sponsor o scadenze. Non si possono modificare da qui: modifica la loro origine.</p>
+        <p>Negli acquisti, il pulsante <strong>Pagamenti</strong> registra anticipi e rate: ogni rata esce subito dalla cassa e, quando l'acquisto diventa "Pagato", il saldo è il totale meno le rate.</p>
+        <p>I movimenti con badge <strong>auto</strong> sono generati da acquisti (rate e saldo) o sponsor. Non si possono modificare da qui: modifica l'acquisto o lo sponsor.</p>
         <p>In alto a destra esporti tutto in <strong>Excel o PDF</strong>.</p>
       </InfoBox>
 
@@ -280,14 +277,12 @@ export default function Admin() {
             onChange={e => setFiltro(e.target.value)}
             className={inputClass + ' flex-1 min-w-[180px]'}
           />
-          {['sponsor', 'acquisti', 'scadenze', 'budget'].includes(tab) && (
+          {['sponsor', 'acquisti'].includes(tab) && (
             <select value={filtroStato} onChange={e => setFiltroStato(e.target.value)}
                     className={inputClass + ' w-auto'}>
               <option value="">Tutti gli stati</option>
               {tab === 'sponsor'   && STATI_SPONSOR.map(s => <option key={s}>{s}</option>)}
               {tab === 'acquisti'  && STATI_ACQUISTO.map(s => <option key={s}>{s}</option>)}
-              {tab === 'scadenze'  && STATI_SCADENZA.map(s => <option key={s}>{s}</option>)}
-              {tab === 'budget'    && STATI_BUDGET.map(s => <option key={s}>{s}</option>)}
             </select>
           )}
         </div>
@@ -427,178 +422,60 @@ export default function Admin() {
                         <th className="py-2 px-2">Categoria</th>
                         <th className="py-2 px-2 text-right">Previsto</th>
                         <th className="py-2 px-2 text-right">Effettivo</th>
+                        <th className="py-2 px-2 text-right">Pagato</th>
                         <th className="py-2 px-2">Stato</th>
                         <th className="py-2 px-2">Cambia</th>
                         <th className="py-2 px-2"></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {lista.map(a => (
-                        <tr key={a.id} className="border-b border-gray-50 last:border-0">
-                          <td className="py-2 px-2 font-medium">{a.descrizione}</td>
-                          <td className="py-2 px-2">{a.fornitore || '—'}</td>
-                          <td className="py-2 px-2">
-                            {a.categoria ? (
-                              <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
-                                {a.categoria}
-                              </span>
-                            ) : '—'}
-                          </td>
-                          <td className="py-2 px-2 text-right">{euro(a.importo_previsto)}</td>
-                          <td className="py-2 px-2 text-right">
-                            {a.importo_effettivo ? euro(a.importo_effettivo) : '—'}
-                          </td>
-                          <td className="py-2 px-2">{badge(a.stato)}</td>
-                          <td className="py-2 px-2">
-                            <select value={a.stato || 'Da approvare'}
-                                    onChange={e => cambiaStato('acquisti', a.id, 'stato', e.target.value)}
-                                    className="text-xs px-2 py-1 border border-gray-200 rounded">
-                              {STATI_ACQUISTO.map(x => <option key={x}>{x}</option>)}
-                            </select>
-                          </td>
-                          <td className="py-2 px-2 text-right whitespace-nowrap">
-                            <button onClick={() => setModal({ tipo: 'acquisti', dati: { ...a } })}
-                                    className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded mr-1 hover:bg-blue-200 font-semibold">
-                              Modifica
-                            </button>
-                            <button onClick={() => elimina('acquisti', a.id)}
-                                    className="text-xs px-2 py-1 bg-red-100 text-red-800 rounded hover:bg-red-200 font-semibold">
-                              Elimina
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )
-            })()}
-
-            {tab === 'budget' && (() => {
-              const lista = filtraLista(budget, ['voce', 'categoria', 'cellula', 'fornitore_previsto'])
-              if (!lista.length) return <div className="text-center text-gray-400 italic py-8">Nessuna voce di budget.</div>
-              return (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-xs uppercase text-gray-500 border-b border-gray-100">
-                        <th className="py-2 px-2">Voce</th>
-                        <th className="py-2 px-2">Cellula</th>
-                        <th className="py-2 px-2">Categoria</th>
-                        <th className="py-2 px-2">Fornitore</th>
-                        <th className="py-2 px-2 text-right">Preventivato</th>
-                        <th className="py-2 px-2 text-right">Consuntivo</th>
-                        <th className="py-2 px-2 text-right">Disponibile</th>
-                        <th className="py-2 px-2">Stato</th>
-                        <th className="py-2 px-2"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {lista.map(b => {
-                        const consuntivo = movimenti
-                          .filter(m => m.tipo === 'Uscita' && m.categoria === b.voce)
-                          .reduce((s, m) => s + (Number(m.importo) || 0), 0)
-                        const disp = Number(b.preventivato || 0) - consuntivo
+                      {lista.map(a => {
+                        const rateAcq = pagamenti.filter(p => p.acquisto_id === a.id)
+                        const sommaRate = rateAcq.reduce((t, p) => t + (Number(p.importo) || 0), 0)
+                        const totale = Number(a.importo_effettivo || a.importo_previsto) || 0
+                        const pagato = a.stato === 'Pagato' ? Math.max(totale, sommaRate) : sommaRate
+                        const inParte = a.stato !== 'Pagato' && a.stato !== 'Rifiutato' && sommaRate > 0
                         return (
-                          <tr key={b.id} className="border-b border-gray-50 last:border-0">
-                            <td className="py-2 px-2 font-medium">{b.voce}</td>
+                          <tr key={a.id} className="border-b border-gray-50 last:border-0">
+                            <td className="py-2 px-2 font-medium">{a.descrizione}</td>
+                            <td className="py-2 px-2">{a.fornitore || '—'}</td>
                             <td className="py-2 px-2">
-                              {b.cellula ? (
-                                <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-800">
-                                  {b.cellula}
-                                </span>
-                              ) : '—'}
-                            </td>
-                            <td className="py-2 px-2">{b.categoria || '—'}</td>
-                            <td className="py-2 px-2">{b.fornitore_previsto || '—'}</td>
-                            <td className="py-2 px-2 text-right">{euro(b.preventivato)}</td>
-                            <td className="py-2 px-2 text-right">{euro(consuntivo)}</td>
-                            <td className={`py-2 px-2 text-right font-medium ${
-                              disp >= 0 ? 'text-green-700' : 'text-red-700'
-                            }`}>{euro(disp)}</td>
-                            <td className="py-2 px-2">{badge(b.stato)}</td>
-                            <td className="py-2 px-2 text-right whitespace-nowrap">
-                              <button onClick={() => setModal({ tipo: 'budget', dati: { ...b } })}
-                                      className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded mr-1 hover:bg-blue-200 font-semibold">
-                                Modifica
-                              </button>
-                              <button onClick={() => elimina('budget', b.id)}
-                                      className="text-xs px-2 py-1 bg-red-100 text-red-800 rounded hover:bg-red-200 font-semibold">
-                                Elimina
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )
-            })()}
-
-            {tab === 'scadenze' && (() => {
-              const lista = filtraLista(scadenze, ['descrizione', 'responsabile', 'tipo', 'categoria'])
-              if (!lista.length) return <div className="text-center text-gray-400 italic py-8">Nessuna scadenza.</div>
-              const oggi = new Date(); oggi.setHours(0, 0, 0, 0)
-              return (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-xs uppercase text-gray-500 border-b border-gray-100">
-                        <th className="py-2 px-2">Data</th>
-                        <th className="py-2 px-2">Tipo</th>
-                        <th className="py-2 px-2">Descrizione</th>
-                        <th className="py-2 px-2">Categoria</th>
-                        <th className="py-2 px-2">Responsabile</th>
-                        <th className="py-2 px-2 text-right">Importo</th>
-                        <th className="py-2 px-2">Stato</th>
-                        <th className="py-2 px-2">Cambia</th>
-                        <th className="py-2 px-2"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {lista.map(s => {
-                        const d = new Date(s.data)
-                        const gg = Math.ceil((d - oggi) / (1000 * 60 * 60 * 24))
-                        const scaduta = gg < 0 && s.stato !== 'Completata' && s.stato !== 'Annullata'
-                        const imminente = gg >= 0 && gg <= 7 && s.stato !== 'Completata' && s.stato !== 'Annullata'
-                        return (
-                          <tr key={s.id}
-                              className={`border-b border-gray-50 last:border-0 ${
-                                scaduta ? 'bg-red-50' : imminente ? 'bg-amber-50' : ''
-                              }`}>
-                            <td className="py-2 px-2">
-                              {s.data}
-                              {scaduta && <span className="ml-2 text-xs text-red-700 font-semibold">{Math.abs(gg)}gg fa</span>}
-                              {imminente && <span className="ml-2 text-xs text-amber-700 font-semibold">{gg === 0 ? 'oggi' : gg + 'gg'}</span>}
-                            </td>
-                            <td className="py-2 px-2">{s.tipo}</td>
-                            <td className="py-2 px-2">{s.descrizione}</td>
-                            <td className="py-2 px-2">
-                              {s.categoria ? (
+                              {a.categoria ? (
                                 <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
-                                  {s.categoria}
+                                  {a.categoria}
                                 </span>
                               ) : '—'}
                             </td>
-                            <td className="py-2 px-2">{s.responsabile || '—'}</td>
+                            <td className="py-2 px-2 text-right">{euro(a.importo_previsto)}</td>
                             <td className="py-2 px-2 text-right">
-                              {s.importo ? euro(s.importo) : '—'}
+                              {a.importo_effettivo ? euro(a.importo_effettivo) : '—'}
                             </td>
-                            <td className="py-2 px-2">{badge(s.stato)}</td>
+                            <td className="py-2 px-2 text-right">
+                              {pagato > 0 ? euro(pagato) : '—'}
+                              {inParte && (
+                                <div className="text-[11px] text-amber-700 font-semibold whitespace-nowrap">
+                                  in parte · mancano {euro(Math.max(totale - sommaRate, 0))}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-2 px-2">{badge(a.stato)}</td>
                             <td className="py-2 px-2">
-                              <select value={s.stato || 'Da fare'}
-                                      onChange={e => cambiaStato('scadenze', s.id, 'stato', e.target.value)}
+                              <select value={a.stato || 'Da approvare'}
+                                      onChange={e => cambiaStato('acquisti', a.id, 'stato', e.target.value)}
                                       className="text-xs px-2 py-1 border border-gray-200 rounded">
-                                {STATI_SCADENZA.map(x => <option key={x}>{x}</option>)}
+                                {STATI_ACQUISTO.map(x => <option key={x}>{x}</option>)}
                               </select>
                             </td>
                             <td className="py-2 px-2 text-right whitespace-nowrap">
-                              <button onClick={() => setModal({ tipo: 'scadenze', dati: { ...s } })}
+                              <button onClick={() => setPagamentiDi(a.id)}
+                                      className="text-xs px-2 py-1 bg-emerald-100 text-emerald-800 rounded mr-1 hover:bg-emerald-200 font-semibold">
+                                Pagamenti{rateAcq.length > 0 ? ` (${rateAcq.length})` : ''}
+                              </button>
+                              <button onClick={() => setModal({ tipo: 'acquisti', dati: { ...a } })}
                                       className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded mr-1 hover:bg-blue-200 font-semibold">
                                 Modifica
                               </button>
-                              <button onClick={() => elimina('scadenze', s.id)}
+                              <button onClick={() => elimina('acquisti', a.id)}
                                       className="text-xs px-2 py-1 bg-red-100 text-red-800 rounded hover:bg-red-200 font-semibold">
                                 Elimina
                               </button>
@@ -611,6 +488,7 @@ export default function Admin() {
                 </div>
               )
             })()}
+
           </>
         )}
       </div>
@@ -620,9 +498,7 @@ export default function Admin() {
           titolo={
             (modal.tipo === 'movimenti' ? 'Movimento'
               : modal.tipo === 'sponsor' ? 'Sponsor'
-              : modal.tipo === 'acquisti' ? 'Acquisto'
-              : modal.tipo === 'budget' ? 'Voce di budget'
-              : 'Scadenza') + ' #' + modal.dati.id
+              : 'Acquisto') + ' #' + modal.dati.id
           }
           onClose={() => setModal(null)}
           onSave={salvaModifica}
@@ -798,101 +674,21 @@ export default function Admin() {
             </>
           )}
 
-          {modal.tipo === 'budget' && (
-            <>
-              <Field label="Voce">
-                <input type="text" value={modal.dati.voce || ''}
-                       onChange={e => setCampo('voce', e.target.value)} className={inputClass} />
-              </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Categoria">
-                  <select value={modal.dati.categoria || ''}
-                          onChange={e => setCampo('categoria', e.target.value)} className={inputClass}>
-                    {CATEGORIE.map(c => <option key={c}>{c}</option>)}
-                  </select>
-                </Field>
-                <Field label="Cellula">
-                  <select value={modal.dati.cellula || 'Budget'}
-                          onChange={e => setCampo('cellula', e.target.value)} className={inputClass}>
-                    {CELLULE.map(c => <option key={c}>{c}</option>)}
-                  </select>
-                </Field>
-              </div>
-              <Field label="Preventivato (€)">
-                <input type="number" step="0.01" value={modal.dati.preventivato || ''}
-                       onChange={e => setCampo('preventivato', e.target.value)} className={inputClass} />
-              </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Fornitore previsto">
-                  <input type="text" value={modal.dati.fornitore_previsto || ''}
-                         onChange={e => setCampo('fornitore_previsto', e.target.value)} className={inputClass} />
-                </Field>
-                <Field label="Data prevista">
-                  <input type="date" value={modal.dati.data_prevista || ''}
-                         onChange={e => setCampo('data_prevista', e.target.value)} className={inputClass} />
-                </Field>
-              </div>
-              <Field label="Stato">
-                <select value={modal.dati.stato || 'Pianificato'}
-                        onChange={e => setCampo('stato', e.target.value)} className={inputClass}>
-                  {STATI_BUDGET.map(s => <option key={s}>{s}</option>)}
-                </select>
-              </Field>
-              <Field label="Note">
-                <textarea rows={2} value={modal.dati.note || ''}
-                          onChange={e => setCampo('note', e.target.value)} className={inputClass} />
-              </Field>
-            </>
-          )}
-
-          {modal.tipo === 'scadenze' && (
-            <>
-              <Field label="Data">
-                <input type="date" value={modal.dati.data || ''}
-                       onChange={e => setCampo('data', e.target.value)} className={inputClass} />
-              </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Tipo">
-                  <select value={modal.dati.tipo || 'Altro'}
-                          onChange={e => setCampo('tipo', e.target.value)} className={inputClass}>
-                    {TIPI_SCADENZA.map(t => <option key={t}>{t}</option>)}
-                  </select>
-                </Field>
-                <Field label="Stato">
-                  <select value={modal.dati.stato || 'Da fare'}
-                          onChange={e => setCampo('stato', e.target.value)} className={inputClass}>
-                    {STATI_SCADENZA.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </Field>
-              </div>
-              <Field label="Descrizione">
-                <input type="text" value={modal.dati.descrizione || ''}
-                       onChange={e => setCampo('descrizione', e.target.value)} className={inputClass} />
-              </Field>
-              <Field label="Categoria">
-                <select value={modal.dati.categoria || 'Altro'}
-                        onChange={e => setCampo('categoria', e.target.value)} className={inputClass}>
-                  {CATEGORIE.map(c => <option key={c}>{c}</option>)}
-                </select>
-              </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Importo (€)">
-                  <input type="number" step="0.01" value={modal.dati.importo || ''}
-                         onChange={e => setCampo('importo', e.target.value)} className={inputClass} />
-                </Field>
-                <Field label="Responsabile">
-                  <input type="text" value={modal.dati.responsabile || ''}
-                          onChange={e => setCampo('responsabile', e.target.value)} className={inputClass} />
-                </Field>
-              </div>
-              <Field label="Note">
-                <textarea rows={2} value={modal.dati.note || ''}
-                          onChange={e => setCampo('note', e.target.value)} className={inputClass} />
-              </Field>
-            </>
-          )}
         </Modal>
       )}
+
+      {pagamentiDi && (() => {
+        const a = acquisti.find(x => x.id === pagamentiDi)
+        if (!a) return null
+        const rateAcq = pagamenti
+          .filter(p => p.acquisto_id === a.id)
+          .sort((x, y) => String(x.data).localeCompare(String(y.data)) || x.id - y.id)
+        return (
+          <PagamentiAcquisto acquisto={a} rate={rateAcq}
+                             onClose={() => setPagamentiDi(null)}
+                             onCambiato={caricaTutto} />
+        )
+      })()}
     </div>
   )
 }

@@ -16,12 +16,22 @@ function euro(n) {
   })
 }
 
+function ratePerAcquisto(pagamenti) {
+  const somme = new Map()
+  for (const p of pagamenti || []) {
+    somme.set(p.acquisto_id, (somme.get(p.acquisto_id) || 0) + (Number(p.importo) || 0))
+  }
+  return somme
+}
+
 // ============================================
 // EXPORT EXCEL
 // ============================================
-// dati = { movimenti: [...], sponsor: [...], acquisti: [...], budget: [...], scadenze: [...] }
+// dati = { movimenti: [...], sponsor: [...], acquisti: [...], pagamenti: [...] }
 export function esportaExcel(dati) {
   const wb = XLSX.utils.book_new()
+  const rate = ratePerAcquisto(dati.pagamenti)
+  const descrizioneAcquisto = new Map((dati.acquisti || []).map(a => [a.id, a.descrizione || '']))
 
   // --- Movimenti ---
   const movRows = (dati.movimenti || []).map(m => ({
@@ -66,7 +76,9 @@ export function esportaExcel(dati) {
     'Data richiesta': a.data_richiesta || '',
     'Importo previsto': Number(a.importo_previsto) || 0,
     'Importo effettivo': Number(a.importo_effettivo) || 0,
+    'Pagato con rate': rate.get(a.id) || 0,
     Stato: a.stato || '',
+    Sezione: a.macro_sezione || 'ALTRO',
     'Data ordine': a.data_ordine || '',
     'Data pagamento': a.data_pagamento || '',
     Note: a.note || '',
@@ -74,37 +86,16 @@ export function esportaExcel(dati) {
   const wsAc = XLSX.utils.json_to_sheet(acRows)
   XLSX.utils.book_append_sheet(wb, wsAc, 'Acquisti')
 
-  // --- Budget (con consuntivo calcolato dai movimenti) ---
-  const budgetRows = (dati.budget || []).map(b => {
-    const consuntivo = (dati.movimenti || [])
-      .filter(m => m.tipo === 'Uscita' && m.categoria === b.voce)
-      .reduce((s, m) => s + (Number(m.importo) || 0), 0)
-    return {
-      Voce: b.voce || '',
-      Categoria: b.categoria || '',
-      Preventivato: Number(b.preventivato) || 0,
-      Consuntivo: consuntivo,
-      Disponibile: (Number(b.preventivato) || 0) - consuntivo,
-      Note: b.note || '',
-    }
-  })
-  const wsBud = XLSX.utils.json_to_sheet(budgetRows)
-  XLSX.utils.book_append_sheet(wb, wsBud, 'Budget')
-
-  // --- Scadenze ---
-  const scRows = (dati.scadenze || []).map(s => ({
-    ID: s.id,
-    Data: s.data || '',
-    Tipo: s.tipo || '',
-    Descrizione: s.descrizione || '',
-    Categoria: s.categoria || '',
-    Importo: Number(s.importo) || 0,
-    Responsabile: s.responsabile || '',
-    Stato: s.stato || '',
-    Note: s.note || '',
+  // --- Rate degli acquisti ---
+  const rateRows = (dati.pagamenti || []).map(p => ({
+    'ID acquisto': p.acquisto_id,
+    Acquisto: descrizioneAcquisto.get(p.acquisto_id) || '',
+    Data: p.data || '',
+    Importo: Number(p.importo) || 0,
+    Note: p.note || '',
   }))
-  const wsSc = XLSX.utils.json_to_sheet(scRows)
-  XLSX.utils.book_append_sheet(wb, wsSc, 'Scadenze')
+  const wsRate = XLSX.utils.json_to_sheet(rateRows)
+  XLSX.utils.book_append_sheet(wb, wsRate, 'Rate')
 
   // --- Riepilogo ---
   const totEntrate = (dati.movimenti || [])
@@ -120,7 +111,6 @@ export function esportaExcel(dati) {
     { Voce: 'Saldo', Valore: totEntrate - totUscite },
     { Voce: 'Sponsor promesso', Valore: (dati.sponsor || []).reduce((s, x) => s + (Number(x.importo_promesso) || 0), 0) },
     { Voce: 'Sponsor incassato', Valore: (dati.sponsor || []).reduce((s, x) => s + (Number(x.importo_incassato) || 0), 0) },
-    { Voce: 'Budget preventivato', Valore: (dati.budget || []).reduce((s, x) => s + (Number(x.preventivato) || 0), 0) },
   ]
   const wsRiep = XLSX.utils.json_to_sheet(riepilogoRows)
   XLSX.utils.book_append_sheet(wb, wsRiep, 'Riepilogo')
@@ -135,6 +125,7 @@ export function esportaExcel(dati) {
 // ============================================
 export function esportaPDF(dati) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const ratePdf = ratePerAcquisto(dati.pagamenti)
 
   // Titolo
   doc.setFontSize(20)
@@ -157,7 +148,6 @@ export function esportaPDF(dati) {
   const saldo = totEntrate - totUscite
   const spProm = (dati.sponsor || []).reduce((s, x) => s + (Number(x.importo_promesso) || 0), 0)
   const spInc  = (dati.sponsor || []).reduce((s, x) => s + (Number(x.importo_incassato) || 0), 0)
-  const budPrev = (dati.budget || []).reduce((s, x) => s + (Number(x.preventivato) || 0), 0)
 
   autoTable(doc, {
     startY: 36,
@@ -169,7 +159,6 @@ export function esportaPDF(dati) {
       ['Sponsor promesso', euro(spProm)],
       ['Sponsor incassato', euro(spInc)],
       ['Sponsor da incassare', euro(spProm - spInc)],
-      ['Budget preventivato', euro(budPrev)],
     ],
     styles: { fontSize: 9, cellPadding: 2 },
     headStyles: { fillColor: [14, 165, 233], textColor: 255 },
@@ -235,68 +224,13 @@ export function esportaPDF(dati) {
     doc.text('Acquisti', 14, 18)
     autoTable(doc, {
       startY: 22,
-      head: [['Descrizione', 'Fornitore', 'Categoria', 'Stato', 'Previsto']],
+      head: [['Descrizione', 'Sezione', 'Stato', 'Importo', 'Rate pagate']],
       body: (dati.acquisti || []).map(a => [
         (a.descrizione || '').slice(0, 30),
-        (a.fornitore || '').slice(0, 20),
-        a.categoria || '',
+        a.macro_sezione || 'ALTRO',
         a.stato || '',
-        euro(a.importo_previsto),
-      ]),
-      styles: { fontSize: 8, cellPadding: 1.5 },
-      headStyles: { fillColor: [14, 165, 233], textColor: 255 },
-      alternateRowStyles: { fillColor: [245, 247, 250] },
-      margin: { left: 14, right: 14 },
-      theme: 'striped',
-    })
-  }
-
-  // Budget
-  if ((dati.budget || []).length) {
-    doc.addPage()
-    doc.setFontSize(12)
-    doc.setTextColor(14, 165, 233)
-    doc.text('Budget', 14, 18)
-    const budgetBody = (dati.budget || []).map(b => {
-      const consuntivo = (dati.movimenti || [])
-        .filter(m => m.tipo === 'Uscita' && m.categoria === b.voce)
-        .reduce((s, m) => s + (Number(m.importo) || 0), 0)
-      const disp = (Number(b.preventivato) || 0) - consuntivo
-      return [
-        (b.voce || '').slice(0, 25),
-        b.categoria || '',
-        euro(b.preventivato),
-        euro(consuntivo),
-        euro(disp),
-      ]
-    })
-    autoTable(doc, {
-      startY: 22,
-      head: [['Voce', 'Categoria', 'Preventivato', 'Consuntivo', 'Disponibile']],
-      body: budgetBody,
-      styles: { fontSize: 8, cellPadding: 1.5 },
-      headStyles: { fillColor: [14, 165, 233], textColor: 255 },
-      alternateRowStyles: { fillColor: [245, 247, 250] },
-      margin: { left: 14, right: 14 },
-      theme: 'striped',
-    })
-  }
-
-  // Scadenze
-  if ((dati.scadenze || []).length) {
-    doc.addPage()
-    doc.setFontSize(12)
-    doc.setTextColor(14, 165, 233)
-    doc.text('Scadenze', 14, 18)
-    autoTable(doc, {
-      startY: 22,
-      head: [['Data', 'Tipo', 'Descrizione', 'Responsabile', 'Stato']],
-      body: (dati.scadenze || []).map(s => [
-        s.data || '',
-        s.tipo || '',
-        (s.descrizione || '').slice(0, 30),
-        (s.responsabile || '').slice(0, 20),
-        s.stato || '',
+        euro(a.importo_effettivo || a.importo_previsto),
+        euro(ratePdf.get(a.id) || 0),
       ]),
       styles: { fontSize: 8, cellPadding: 1.5 },
       headStyles: { fillColor: [14, 165, 233], textColor: 255 },

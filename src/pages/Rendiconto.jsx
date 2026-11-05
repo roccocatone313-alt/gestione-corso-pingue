@@ -25,6 +25,8 @@ const COLORI_STATO = {
   'Da fare': 'bg-amber-100 text-amber-800',
   'Pianificato': 'bg-gray-100 text-gray-700',
   'In corso': 'bg-gray-100 text-gray-700',
+  'Rifiutato': 'bg-red-100 text-red-800',
+  'Pagato in parte': 'bg-amber-100 text-amber-800',
 }
 
 const STILE = `
@@ -255,12 +257,28 @@ function SezioneCard({ sezione, aperta, onToggle, modifica, onSposta, salvando }
                   <tr key={v.chiave} className="border-t border-gray-100 align-top">
                     <td className="px-4 py-2 font-medium text-gray-900" title={v.descrizione}>
                       {tronca(v.descrizione)}
-                      {v.tabella === 'budget' && (
-                        <span className="ml-2 text-[10px] uppercase text-gray-400">budget</span>
+                      {v.rate && v.rate.length > 0 && (
+                        <div className="text-[11px] font-normal text-gray-500 mt-0.5">
+                          {v.rate.length === 1 ? 'Rata' : 'Rate'}: {v.rate.map(r => `${dataIt(r.data)} ${euro(r.importo)}`).join(' · ')}
+                          {v.saldo && ` · saldo ${v.saldo.data ? dataIt(v.saldo.data) + ' ' : ''}${euro(v.saldo.importo)}`}
+                        </div>
                       )}
                     </td>
                     <td className="px-4 py-2 text-gray-600">{v.fornitore || '—'}</td>
-                    <td className="px-4 py-2"><Badge stato={v.stato} /></td>
+                    <td className="px-4 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        <Badge stato={v.stato} />
+                        {v.inParte && <Badge stato="Pagato in parte" />}
+                      </div>
+                      {v.inParte && (
+                        <div className="text-[11px] text-amber-700 mt-0.5 whitespace-nowrap">
+                          mancano {euro(v.mancano)}
+                        </div>
+                      )}
+                      {v.annullatoConRate && (
+                        <div className="text-[11px] text-gray-500 mt-0.5">rate già pagate</div>
+                      )}
+                    </td>
                     <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{dataIt(v.data)}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{euro(v.importo)}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-green-700">
@@ -296,7 +314,7 @@ function SezioneCard({ sezione, aperta, onToggle, modifica, onSposta, salvando }
 }
 
 function calcola(dati) {
-  const { movimenti, acquisti, sponsor, budget, scadenze } = dati
+  const { movimenti, acquisti, sponsor, pagamenti } = dati
 
   // --- Cassa ---
   let entrate = 0
@@ -313,43 +331,58 @@ function calcola(dati) {
   }
   const saldo = entrate - uscite
 
-  // --- Spese: acquisti, voci di budget pianificate, uscite registrate a mano ---
+  // --- Rate degli acquisti, in ordine di data ---
+  const ratePer = new Map()
+  for (const p of pagamenti) {
+    if (!ratePer.has(p.acquisto_id)) ratePer.set(p.acquisto_id, [])
+    ratePer.get(p.acquisto_id).push(p)
+  }
+  for (const lista of ratePer.values()) {
+    lista.sort((x, y) => String(x.data).localeCompare(String(y.data)) || x.id - y.id)
+  }
+
+  // --- Spese: acquisti (con le loro rate) e uscite registrate a mano ---
   const voci = []
   for (const a of acquisti) {
-    if (a.stato === 'Rifiutato') continue
-    const haEffettivo = a.importo_effettivo !== null && a.importo_effettivo !== undefined && a.importo_effettivo !== ''
-    const importo = haEffettivo ? num(a.importo_effettivo) : num(a.importo_previsto)
-    voci.push({
+    const rate = ratePer.get(a.id) || []
+    const sommaRate = rate.reduce((t, r) => t + num(r.importo), 0)
+    const base = {
       chiave: 'acquisti-' + a.id,
       tabella: 'acquisti',
       id: a.id,
       descrizione: a.descrizione || 'Acquisto #' + a.id,
       fornitore: a.fornitore || '',
-      stato: a.stato || 'Da approvare',
-      importo,
-      pagato: a.stato === 'Pagato' ? importo : 0,
       data: a.data_pagamento || a.data_ordine || a.data_richiesta || null,
       sezione: sezioneValida(a.macro_sezione),
+      rate,
       grezzo: a,
-    })
-  }
-  for (const b of budget) {
-    const stato = b.stato || 'Pianificato'
-    if (stato !== 'Pianificato' && stato !== 'In corso') continue
-    const importo = num(b.preventivato)
-    if (importo <= 0) continue
+    }
+    if (a.stato === 'Rifiutato') {
+      // Acquisto annullato: restano come spesa solo le rate già pagate
+      if (sommaRate <= 0) continue
+      voci.push({
+        ...base, stato: 'Rifiutato', importo: sommaRate, pagato: sommaRate,
+        inParte: false, mancano: 0, saldo: null, annullatoConRate: true,
+      })
+      continue
+    }
+    const haEffettivo = a.importo_effettivo !== null && a.importo_effettivo !== undefined && a.importo_effettivo !== ''
+    const totale = haEffettivo ? num(a.importo_effettivo) : num(a.importo_previsto)
+    const pagatoTutto = a.stato === 'Pagato'
+    const importo = Math.max(totale, sommaRate)
+    const pagato = pagatoTutto ? importo : sommaRate
+    const saldoImporto = pagatoTutto ? Math.max(totale - sommaRate, 0) : 0
     voci.push({
-      chiave: 'budget-' + b.id,
-      tabella: 'budget',
-      id: b.id,
-      descrizione: b.voce || 'Voce di budget',
-      fornitore: b.fornitore_previsto || '',
-      stato,
+      ...base,
+      stato: a.stato || 'Da approvare',
       importo,
-      pagato: 0,
-      data: b.data_prevista || null,
-      sezione: sezioneValida(b.macro_sezione),
-      grezzo: b,
+      pagato,
+      inParte: !pagatoTutto && sommaRate > 0,
+      mancano: Math.max(importo - pagato, 0),
+      saldo: pagatoTutto && sommaRate > 0 && saldoImporto > 0
+        ? { importo: saldoImporto, data: a.data_pagamento }
+        : null,
+      annullatoConRate: false,
     })
   }
   for (const m of movimenti) {
@@ -428,7 +461,7 @@ function calcola(dati) {
       if (t === 'sponsor') return 'Sponsor'
       return m.categoria || 'Altre entrate'
     }
-    const r = /^Acquisto #(\d+)$/.exec(String(m.riferimento || '').trim())
+    const r = /Acquisto #(\d+)/.exec(String(m.riferimento || '').trim())
     if (r && sezionePerAcquisto.has(r[1])) return sezionePerAcquisto.get(r[1])
     return sezioneValida(m.macro_sezione)
   }
@@ -439,7 +472,6 @@ function calcola(dati) {
     return { ...m, voce: voceMovimento(m), saldoProgressivo: progressivo }
   })
 
-  const scadenzeAperte = scadenze.filter(s => s.stato !== 'Completata' && s.stato !== 'Annullata')
 
   return {
     entrate, uscite, saldo, entratePer,
@@ -448,7 +480,7 @@ function calcola(dati) {
     sponsorTrattativa, nProspect, nSponsor: conteggiati.length,
     paganti, quota, quotePreviste, quoteIncassate, quoteAttese,
     entratePreviste, risultato, quotaPareggio,
-    registro, scadenzeAperte,
+    registro,
   }
 }
 
@@ -467,22 +499,20 @@ export default function Rendiconto() {
 
   async function carica() {
     setErrore(null)
-    const [mov, acq, sp, bud, scad] = await Promise.all([
+    const [mov, acq, sp, pag] = await Promise.all([
       supabase.from('movimenti').select('*')
         .order('data', { ascending: true }).order('id', { ascending: true }),
       supabase.from('acquisti').select('*'),
       supabase.from('sponsor').select('*'),
-      supabase.from('budget').select('*'),
-      supabase.from('scadenze').select('*').order('data', { ascending: true }),
+      supabase.from('pagamenti_acquisti').select('*').order('data', { ascending: true }),
     ])
-    const err = mov.error || acq.error || sp.error || bud.error || scad.error
+    const err = mov.error || acq.error || sp.error || pag.error
     if (err) { setErrore(err.message); return }
     setDati({
       movimenti: mov.data || [],
       acquisti: acq.data || [],
       sponsor: sp.data || [],
-      budget: bud.data || [],
-      scadenze: scad.data || [],
+      pagamenti: pag.data || [],
     })
     setAggiornato(new Date())
   }
@@ -814,47 +844,17 @@ export default function Rendiconto() {
         </div>
       </section>
 
-      {/* 7. Scadenze aperte (solo se ce ne sono) */}
-      {c.scadenzeAperte.length > 0 && (
-        <section className="blocco bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="px-5 pt-5">
-            <Titolo sotto="Pagamenti e incassi ancora da completare.">Prossime scadenze</Titolo>
-          </div>
-          <div className="overflow-x-auto border-t border-gray-100">
-            <table className="w-full text-sm min-w-[600px]">
-              <thead className="bg-gray-50 text-[11px] uppercase text-gray-500">
-                <tr>
-                  <th className="text-left px-4 py-2">Data</th>
-                  <th className="text-left px-4 py-2">Descrizione</th>
-                  <th className="text-left px-4 py-2">Tipo</th>
-                  <th className="text-right px-4 py-2">Importo</th>
-                  <th className="text-left px-4 py-2">Stato</th>
-                </tr>
-              </thead>
-              <tbody>
-                {c.scadenzeAperte.map(s => (
-                  <tr key={s.id} className="border-t border-gray-100">
-                    <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{dataIt(s.data)}</td>
-                    <td className="px-4 py-2 text-gray-900">{tronca(s.descrizione, 70)}</td>
-                    <td className="px-4 py-2 text-gray-600">{s.tipo || '—'}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{s.importo ? euro(s.importo) : '—'}</td>
-                    <td className="px-4 py-2"><Badge stato={s.stato || 'Da fare'} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
-      {/* 8. Note */}
+      {/* 7. Note */}
       <section className="blocco bg-white rounded-xl p-5 shadow-sm text-xs text-gray-500 space-y-1">
         <div className="font-semibold text-gray-700 uppercase tracking-wide mb-1">Come sono calcolati i numeri</div>
         <p><strong>Saldo di cassa</strong>: tutte le entrate meno tutte le uscite registrate.</p>
         <p>
-          <strong>Spese previste</strong>: tutti gli acquisti non rifiutati (importo effettivo se presente,
-          altrimenti quello previsto), le voci di budget pianificate e le uscite registrate a mano.
-          Comprendono anche le spese ancora da approvare.
+          <strong>Spese previste</strong>: tutti gli acquisti non annullati (importo effettivo se presente,
+          altrimenti quello previsto) e le uscite registrate a mano. Comprendono anche le spese ancora da
+          approvare. Degli acquisti annullati restano solo le rate già pagate.
+        </p>
+        <p>
+          <strong>Pagato</strong>: anticipi e rate già versati, più il saldo quando l'acquisto è pagato del tutto.
         </p>
         <p>
           <strong>Entrate previste</strong>: sponsor confermati o incassati, quote allievi

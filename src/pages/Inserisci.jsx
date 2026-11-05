@@ -7,8 +7,6 @@ const TABS = [
   { id: 'movimento', label: 'Movimento' },
   { id: 'sponsor',   label: 'Sponsor' },
   { id: 'acquisto',  label: 'Acquisto' },
-  { id: 'scadenza',  label: 'Scadenza' },
-  { id: 'budget',    label: 'Budget' },
 ]
 
 const CATEGORIE = ['Sponsor','Materiale','Trasporti','Eventi','Cancelleria','Rimborsi','Altro']
@@ -17,9 +15,6 @@ const CATEGORIE_MOVIMENTO = ['Quote allievi', 'F.I.Do', ...CATEGORIE]
 const CELLULE   = ['Sponsor','Budget','Acquisti']
 const STATI_SPONSOR  = ['Prospect','In trattativa','Confermato','Incassato','Perso']
 const STATI_ACQUISTO = ['Da approvare','Approvato','Ordinato','Ricevuto','Pagato','Rifiutato']
-const TIPI_SCADENZA  = ['Pagamento','Incasso','Contratto','Rinnovo','Rimborso','Altro']
-const STATI_SCADENZA = ['Da fare','In corso','Completata','Annullata']
-const STATI_BUDGET   = ['Pianificato','In corso','Completato','Annullato']
 
 function oggi() {
   return new Date().toISOString().slice(0, 10)
@@ -120,6 +115,7 @@ export default function Inserisci() {
     categoria: 'Materiale', macro_sezione: 'ALTRO',
     importo_previsto: '', importo_effettivo: '',
     stato: 'Da approvare', data_ordine: '', data_pagamento: '', note: '',
+    anticipo: '', data_anticipo: oggi(),
   })
 
   async function salvaAcquisto(e) {
@@ -128,8 +124,14 @@ export default function Inserisci() {
     if (!ac.importo_previsto || Number(ac.importo_previsto) <= 0) {
       mostraMsg('errore', 'Importo previsto non valido.'); return
     }
+    const totale = ac.importo_effettivo ? Number(ac.importo_effettivo) : Number(ac.importo_previsto)
+    const anticipo = ac.anticipo ? Number(ac.anticipo) : 0
+    if (anticipo < 0) { mostraMsg('errore', 'Anticipo non valido.'); return }
+    if (anticipo > totale) {
+      mostraMsg('errore', "L'anticipo non può superare l'importo dell'acquisto."); return
+    }
     setInvio(true)
-    const { error } = await supabase.from('acquisti').insert({
+    const { data: nuovo, error } = await supabase.from('acquisti').insert({
       data_richiesta: ac.data_richiesta || null,
       richiedente: ac.richiedente.trim() || 'web',
       descrizione: ac.descrizione.trim(),
@@ -143,84 +145,43 @@ export default function Inserisci() {
       macro_sezione: ac.macro_sezione,
       note: ac.note.trim(),
       created_by: 'web',
-    })
+    }).select('id').single()
+    if (error) { setInvio(false); mostraMsg('errore', error.message); return }
+
+    // Anticipo già pagato: diventa la prima rata (esce subito dalla cassa)
+    if (anticipo > 0) {
+      const { error: erroreAnticipo } = await supabase.from('pagamenti_acquisti').insert({
+        acquisto_id: nuovo.id,
+        data: ac.data_anticipo || oggi(),
+        importo: anticipo,
+        note: 'Anticipo',
+      })
+      if (erroreAnticipo) {
+        setInvio(false)
+        mostraMsg('errore', "Acquisto registrato, ma l'anticipo non è stato salvato (" +
+          erroreAnticipo.message + '). Aggiungilo da Admin → Acquisti → Pagamenti.')
+        return
+      }
+    }
     setInvio(false)
-    if (error) { mostraMsg('errore', error.message); return }
-    mostraMsg('ok', 'Acquisto registrato.')
+    mostraMsg('ok', anticipo > 0 ? 'Acquisto e anticipo registrati.' : 'Acquisto registrato.')
     setAc({
       ...ac,
       richiedente: '', descrizione: '', fornitore: '',
       importo_previsto: '', importo_effettivo: '',
       data_ordine: '', data_pagamento: '', note: '',
+      anticipo: '', data_anticipo: oggi(),
     })
-  }
-
-  const [sc, setSc] = useState({
-    data: oggi(), tipo: 'Pagamento', descrizione: '',
-    categoria: 'Altro',
-    importo: '', responsabile: '', stato: 'Da fare', note: '',
-  })
-
-  async function salvaScadenza(e) {
-    e.preventDefault()
-    if (!sc.descrizione.trim()) { mostraMsg('errore', 'Descrizione obbligatoria.'); return }
-    setInvio(true)
-    const { error } = await supabase.from('scadenze').insert({
-      data: sc.data,
-      tipo: sc.tipo,
-      descrizione: sc.descrizione.trim(),
-      categoria: sc.categoria,
-      importo: sc.importo ? Number(sc.importo) : null,
-      responsabile: sc.responsabile.trim(),
-      stato: sc.stato,
-      note: sc.note.trim(),
-      created_by: 'web',
-    })
-    setInvio(false)
-    if (error) { mostraMsg('errore', error.message); return }
-    mostraMsg('ok', 'Scadenza registrata.')
-    setSc({ ...sc, descrizione: '', importo: '', responsabile: '', note: '' })
-  }
-
-  const [bud, setBud] = useState({
-    voce: '', categoria: 'Materiale', preventivato: '',
-    cellula: 'Budget', fornitore_previsto: '',
-    data_prevista: '', stato: 'Pianificato', note: '',
-  })
-
-  async function salvaBudget(e) {
-    e.preventDefault()
-    if (!bud.voce.trim()) { mostraMsg('errore', 'Voce obbligatoria.'); return }
-    if (!bud.preventivato || Number(bud.preventivato) <= 0) {
-      mostraMsg('errore', 'Preventivato non valido.'); return
-    }
-    setInvio(true)
-    const { error } = await supabase.from('budget').insert({
-      voce: bud.voce.trim(),
-      categoria: bud.categoria,
-      preventivato: Number(bud.preventivato),
-      cellula: bud.cellula,
-      fornitore_previsto: bud.fornitore_previsto.trim() || null,
-      data_prevista: bud.data_prevista || null,
-      stato: bud.stato,
-      note: bud.note.trim() || null,
-    })
-    setInvio(false)
-    if (error) { mostraMsg('errore', error.message); return }
-    mostraMsg('ok', 'Voce di budget registrata.')
-    setBud({ ...bud, voce: '', preventivato: '', fornitore_previsto: '', data_prevista: '', note: '' })
   }
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
       <InfoBox id="inserisci" titolo="Inserisci — registra tutto da qui">
-        <p>Questo è il <strong>cassetto degli attrezzi</strong>. 5 tab per registrare qualsiasi cosa velocemente.</p>
-        <p>• <strong>Movimento</strong> — soldi che entrano o escono, quando non c'è un acquisto a monte</p>
+        <p>Qui registri le novità, in 3 schede:</p>
+        <p>• <strong>Movimento</strong> — soldi che entrano o escono senza un acquisto a monte (es. quote allievi, F.I.Do)</p>
         <p>• <strong>Sponsor</strong> — un nuovo possibile finanziatore</p>
-        <p>• <strong>Acquisto</strong> — stai ordinando qualcosa</p>
-        <p>• <strong>Scadenza</strong> — una data importante (pagamento, incasso, rinnovo)</p>
-        <p>• <strong>Budget</strong> — una nuova voce di spesa pianificata</p>
-        <p>Quando un acquisto diventa "Pagato" o uno sponsor "Incassato", il movimento contabile <strong>si crea da solo</strong>. Non duplicarlo a mano.</p>
+        <p>• <strong>Acquisto</strong> — una spesa. Se hai già pagato un anticipo, indicalo qui; le rate successive le aggiungi da Admin → Acquisti → Pagamenti</p>
+        <p>Quando un acquisto diventa "Pagato" o uno sponsor "Incassato", il movimento di cassa <strong>si crea da solo</strong>: non duplicarlo a mano.</p>
       </InfoBox>
 
       <div className="bg-white rounded-xl p-2 shadow-sm flex flex-wrap gap-1">
@@ -456,6 +417,26 @@ export default function Inserisci() {
                    onChange={e => setAc({ ...ac, data_pagamento: e.target.value })}
                    className={inputClass} />
           </Field>
+          <div className="rounded-lg border border-gray-200 p-3 space-y-3">
+            <div className="text-xs font-semibold text-gray-600">
+              Anticipo già pagato (facoltativo)
+              <span className="block font-normal text-gray-500">
+                Esce subito dalla cassa. Le rate successive le aggiungi da Admin → Acquisti → Pagamenti.
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Importo anticipo (€)">
+                <input type="number" step="0.01" min="0" value={ac.anticipo}
+                       onChange={e => setAc({ ...ac, anticipo: e.target.value })}
+                       className={inputClass} />
+              </Field>
+              <Field label="Data anticipo">
+                <input type="date" value={ac.data_anticipo}
+                       onChange={e => setAc({ ...ac, data_anticipo: e.target.value })}
+                       className={inputClass} />
+              </Field>
+            </div>
+          </div>
           <Field label="Note">
             <textarea rows={2} value={ac.note}
                       onChange={e => setAc({ ...ac, note: e.target.value })}
@@ -464,135 +445,6 @@ export default function Inserisci() {
           <button disabled={invio}
                   className="w-full py-2.5 bg-sky-500 hover:bg-sky-600 disabled:bg-gray-300 text-white font-semibold rounded-lg transition">
             {invio ? 'Salvataggio...' : 'Registra acquisto'}
-          </button>
-        </form>
-      )}
-
-      {/* SCADENZA */}
-      {tab === 'scadenza' && (
-        <form onSubmit={salvaScadenza} className="bg-white rounded-xl p-6 shadow-sm space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-            Nuova scadenza
-          </h2>
-          <Field label="Data *">
-            <input type="date" required value={sc.data}
-                   onChange={e => setSc({ ...sc, data: e.target.value })}
-                   className={inputClass} />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Tipo">
-              <select value={sc.tipo}
-                      onChange={e => setSc({ ...sc, tipo: e.target.value })}
-                      className={inputClass}>
-                {TIPI_SCADENZA.map(t => <option key={t}>{t}</option>)}
-              </select>
-            </Field>
-            <Field label="Stato">
-              <select value={sc.stato}
-                      onChange={e => setSc({ ...sc, stato: e.target.value })}
-                      className={inputClass}>
-                {STATI_SCADENZA.map(s => <option key={s}>{s}</option>)}
-              </select>
-            </Field>
-          </div>
-          <Field label="Descrizione *">
-            <input type="text" required value={sc.descrizione}
-                   onChange={e => setSc({ ...sc, descrizione: e.target.value })}
-                   placeholder="Es. saldo fornitore palloni"
-                   className={inputClass} />
-          </Field>
-          <Field label="Categoria">
-            <select value={sc.categoria}
-                    onChange={e => setSc({ ...sc, categoria: e.target.value })}
-                    className={inputClass}>
-              {CATEGORIE.map(c => <option key={c}>{c}</option>)}
-            </select>
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Importo (€)">
-              <input type="number" step="0.01" min="0" value={sc.importo}
-                     onChange={e => setSc({ ...sc, importo: e.target.value })}
-                     className={inputClass} />
-            </Field>
-            <Field label="Responsabile">
-              <input type="text" value={sc.responsabile}
-                     onChange={e => setSc({ ...sc, responsabile: e.target.value })}
-                     className={inputClass} />
-            </Field>
-          </div>
-          <Field label="Note">
-            <textarea rows={2} value={sc.note}
-                      onChange={e => setSc({ ...sc, note: e.target.value })}
-                      className={inputClass} />
-          </Field>
-          <button disabled={invio}
-                  className="w-full py-2.5 bg-sky-500 hover:bg-sky-600 disabled:bg-gray-300 text-white font-semibold rounded-lg transition">
-            {invio ? 'Salvataggio...' : 'Registra scadenza'}
-          </button>
-        </form>
-      )}
-
-      {/* BUDGET */}
-      {tab === 'budget' && (
-        <form onSubmit={salvaBudget} className="bg-white rounded-xl p-6 shadow-sm space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-            Nuova voce di budget
-          </h2>
-          <Field label="Voce *">
-            <input type="text" required value={bud.voce}
-                   onChange={e => setBud({ ...bud, voce: e.target.value })}
-                   placeholder="Es. Palloni allenamento"
-                   className={inputClass} />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Categoria">
-              <select value={bud.categoria}
-                      onChange={e => setBud({ ...bud, categoria: e.target.value })}
-                      className={inputClass}>
-                {CATEGORIE.map(c => <option key={c}>{c}</option>)}
-              </select>
-            </Field>
-            <Field label="Cellula">
-              <select value={bud.cellula}
-                      onChange={e => setBud({ ...bud, cellula: e.target.value })}
-                      className={inputClass}>
-                {CELLULE.map(c => <option key={c}>{c}</option>)}
-              </select>
-            </Field>
-          </div>
-          <Field label="Preventivato (€) *">
-            <input type="number" step="0.01" min="0.01" required value={bud.preventivato}
-                   onChange={e => setBud({ ...bud, preventivato: e.target.value })}
-                   className={inputClass} />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Fornitore previsto">
-              <input type="text" value={bud.fornitore_previsto}
-                     onChange={e => setBud({ ...bud, fornitore_previsto: e.target.value })}
-                     placeholder="Es. Decathlon"
-                     className={inputClass} />
-            </Field>
-            <Field label="Data prevista">
-              <input type="date" value={bud.data_prevista}
-                     onChange={e => setBud({ ...bud, data_prevista: e.target.value })}
-                     className={inputClass} />
-            </Field>
-          </div>
-          <Field label="Stato">
-            <select value={bud.stato}
-                    onChange={e => setBud({ ...bud, stato: e.target.value })}
-                    className={inputClass}>
-              {STATI_BUDGET.map(s => <option key={s}>{s}</option>)}
-            </select>
-          </Field>
-          <Field label="Note">
-            <textarea rows={2} value={bud.note}
-                      onChange={e => setBud({ ...bud, note: e.target.value })}
-                      className={inputClass} />
-          </Field>
-          <button disabled={invio}
-                  className="w-full py-2.5 bg-sky-500 hover:bg-sky-600 disabled:bg-gray-300 text-white font-semibold rounded-lg transition">
-            {invio ? 'Salvataggio...' : 'Registra voce di budget'}
           </button>
         </form>
       )}

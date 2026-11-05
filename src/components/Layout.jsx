@@ -29,11 +29,8 @@ export default function Layout() {
             </div>
           </div>
           <div className="flex gap-1 flex-wrap items-center">
-            <NavLink to="/" end className={linkClass}>Panoramica</NavLink>
+            <NavLink to="/" end className={linkClass}>Rendiconto</NavLink>
             <NavLink to="/sponsor" className={linkClass}>Sponsor</NavLink>
-            <NavLink to="/budget" className={linkClass}>Budget</NavLink>
-            <NavLink to="/rendiconto" className={linkClass}>Rendiconto</NavLink>
-            <NavLink to="/esigenze" className={linkClass}>Esigenze</NavLink>
             {puoModificare && (
               <>
                 <NavLink to="/inserisci" className={linkClass}>Inserisci</NavLink>
