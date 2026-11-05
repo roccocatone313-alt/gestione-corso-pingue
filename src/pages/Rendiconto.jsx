@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import macroData from '../data/macro-sezioni.json'
 
 const MACRO_ORDINE = [
   'RECITA', 'SERATA DANZANTE', 'CATERING',
@@ -52,23 +51,20 @@ export default function Rendiconto() {
       .reduce((s, m) => s + (Number(m.importo) || 0), 0)
   }
 
-  function sezioneDi(voce) {
-    for (const s of MACRO_ORDINE) {
-      if (s === 'ALTRO') continue
-      if ((macroData?.[s] || []).includes(voce)) return s
-    }
+  function sezioneDi(b) {
+    const v = (b.macro_sezione || '').toUpperCase().trim()
+    if (v && MACRO_ORDINE.includes(v) && v !== 'ALTRO') return v
     return 'ALTRO'
   }
 
   const gruppi = {}
   for (const s of MACRO_ORDINE) gruppi[s] = []
-  for (const b of budget) gruppi[sezioneDi(b.voce)].push(b)
+  for (const b of budget) gruppi[sezioneDi(b)].push(b)
 
   const totPreventivo = budget.reduce((s, b) => s + (Number(b.preventivato) || 0), 0)
   const totSpeso = budget.reduce((s, b) => s + spesoPerVoce(b.voce), 0)
   const saldo = totPreventivo - totSpeso
 
-  // === PATRIMONIO AUTOMATICO ===
   const entrateAllievi = movimenti
     .filter(m => m.tipo === 'Entrata' && m.categoria !== 'Sponsor')
     .reduce((s, m) => s + (Number(m.importo) || 0), 0)
@@ -235,7 +231,7 @@ export default function Rendiconto() {
       </div>
 
       <div className="text-center text-xs text-gray-400 py-4">
-        {macroData?._aggiornatoIl ? `Dati calcolati automaticamente dalle tabelle Supabase` : ''}
+        Dati calcolati automaticamente dalle tabelle Supabase
       </div>
     </div>
   )
