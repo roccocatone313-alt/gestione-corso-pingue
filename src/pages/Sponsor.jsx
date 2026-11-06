@@ -5,6 +5,7 @@ import InfoBox from '../components/InfoBox'
 import { dataMovimentoCollegato, oggiISO } from '../lib/dateCassa'
 import { euro } from '../lib/formato'
 import { useAuth } from '../lib/auth'
+import { riepilogoSponsor, incassatoDa, messaggioIncasso } from '../lib/sponsor'
 
 const COLONNE = [
   { stato: 'Prospect',      colore: 'bg-gray-50',   bordo: 'border-gray-300',  testo: 'text-gray-700',   totale: 'text-gray-800' },
@@ -26,6 +27,22 @@ function Field({ label, children }) {
       {children}
     </label>
   )
+}
+
+function Totale({ titolo, valore, nota, bordo, testo }) {
+  return (
+    <div className={`bg-white rounded-xl p-5 shadow-sm border-l-4 ${bordo}`}>
+      <div className="text-xs uppercase tracking-wide text-gray-500">{titolo}</div>
+      <div className={`text-2xl font-bold mt-2 ${testo}`}>{euro(valore)}</div>
+      <div className="text-xs text-gray-500 mt-1">{nota}</div>
+    </div>
+  )
+}
+
+// "1 sponsor confermato", "3 sponsor confermati"
+function quanti(n, singolare, plurale) {
+  if (n === 0) return 'nessuno'
+  return `${n} sponsor ${n === 1 ? singolare : plurale}`
 }
 
 export default function Sponsor() {
@@ -92,7 +109,7 @@ export default function Sponsor() {
 
   async function cambiaStato(id, nuovoStato) {
     if (nuovoStato === 'Incassato') {
-      const ok = confirm('Impostare come "Incassato" creerà automaticamente un movimento Entrata. Confermi?')
+      const ok = confirm(messaggioIncasso(sponsor.find(x => x.id === id) || {}))
       if (!ok) return
     }
     const campi = { stato: nuovoStato }
@@ -134,12 +151,12 @@ export default function Sponsor() {
     if (d.id && d.stato === 'Incassato') {
       const s = sponsor.find(x => x.id === d.id)
       if (s && s.stato !== 'Incassato') {
-        const ok = confirm('Impostare come "Incassato" creerà automaticamente un movimento Entrata. Confermi?')
+        const ok = confirm(messaggioIncasso(d))
         if (!ok) return
       }
     }
     if (!d.id && d.stato === 'Incassato') {
-      const ok = confirm('Creare lo sponsor come "Incassato" genererà automaticamente un movimento Entrata. Confermi?')
+      const ok = confirm(messaggioIncasso(d))
       if (!ok) return
     }
 
@@ -190,40 +207,44 @@ export default function Sponsor() {
     carica()
   }
 
-  const totalePromesso = sponsor.reduce((s, x) => s + (Number(x.importo_promesso) || 0), 0)
-  const totaleIncassato = sponsor.reduce((s, x) => s + (Number(x.importo_incassato) || 0), 0)
-  const totaleMancante = totalePromesso - totaleIncassato
+  // Stessi totali del Rendiconto (src/lib/sponsor.js)
+  const totali = riepilogoSponsor(sponsor)
 
   return (
     <div className="space-y-4">
       <InfoBox id="sponsor" titolo="Sponsor — la pipeline dei finanziatori">
-        <p>Qui gestisci chi vi dà soldi, dalla prima chiacchierata all'incasso.</p>
-        <p>• <strong>Prospect</strong> — l'hai contattato</p>
-        <p>• <strong>In trattativa</strong> — ci stai parlando</p>
+        <p>Tutti gli sponsor, dal primo contatto all'incasso.</p>
+        <p>• <strong>Prospect</strong> — contattato</p>
+        <p>• <strong>In trattativa</strong> — se ne sta parlando</p>
         <p>• <strong>Confermato</strong> — ha detto sì</p>
-        <p>• <strong>Incassato</strong> — ha pagato (crea un'Entrata automatica)</p>
+        <p>• <strong>Incassato</strong> — ha pagato, l'entrata è in cassa</p>
         <p>• <strong>Perso</strong> — non se ne fa nulla</p>
         {puoModificare && (
           <>
             <p><strong>Su desktop</strong> trascini le card da una colonna all'altra. <strong>Su mobile</strong> clicchi la card e cambi stato dal menu.</p>
-            <p>Quando metti "Incassato", l'app registra da sola l'entrata in contabilità.</p>
+            <p>Quando metti "Incassato", l'app registra da sola l'entrata in contabilità. Se l'importo incassato è vuoto, usa quello promesso.</p>
           </>
         )}
       </InfoBox>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl p-5 shadow-sm border-l-4 border-sky-500">
-          <div className="text-xs uppercase tracking-wide text-gray-500">Totale promesso</div>
-          <div className="text-2xl font-bold text-sky-700 mt-2">{euro(totalePromesso)}</div>
+      <div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Totale titolo="Attesi" valore={totali.attesi}
+                  nota={quanti(totali.nConteggiati, 'confermato o incassato', 'confermati o incassati')}
+                  bordo="border-sky-500" testo="text-sky-700" />
+          <Totale titolo="Incassati" valore={totali.incassati}
+                  nota="già arrivati"
+                  bordo="border-green-500" testo="text-green-700" />
+          <Totale titolo="Da incassare" valore={totali.daIncassare}
+                  nota="dagli sponsor confermati"
+                  bordo="border-amber-500" testo="text-amber-700" />
+          <Totale titolo="In trattativa" valore={totali.trattativa}
+                  nota={quanti(totali.nTrattativa, 'non conteggiato', 'non conteggiati')}
+                  bordo="border-yellow-400" testo="text-gray-600" />
         </div>
-        <div className="bg-white rounded-xl p-5 shadow-sm border-l-4 border-green-500">
-          <div className="text-xs uppercase tracking-wide text-gray-500">Totale incassato</div>
-          <div className="text-2xl font-bold text-green-700 mt-2">{euro(totaleIncassato)}</div>
-        </div>
-        <div className="bg-white rounded-xl p-5 shadow-sm border-l-4 border-amber-500">
-          <div className="text-xs uppercase tracking-wide text-gray-500">Da incassare</div>
-          <div className="text-2xl font-bold text-amber-700 mt-2">{euro(totaleMancante)}</div>
-        </div>
+        <p className="text-xs text-gray-500 mt-2">
+          Stessi totali del Rendiconto: contano solo gli sponsor confermati e incassati.
+        </p>
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -261,7 +282,7 @@ export default function Sponsor() {
           {COLONNE.map(col => {
             const cards = sponsor.filter(s => (s.stato || 'Prospect') === col.stato)
             const totProm = cards.reduce((sum, c) => sum + (Number(c.importo_promesso) || 0), 0)
-            const totInc  = cards.reduce((sum, c) => sum + (Number(c.importo_incassato) || 0), 0)
+            const totInc  = cards.reduce((sum, c) => sum + incassatoDa(c), 0)
             const isOver = dragOver === col.stato
 
             return (
@@ -317,7 +338,7 @@ export default function Sponsor() {
                           Prom. {euro(s.importo_promesso)}
                         </span>
                         <span className="text-green-700 font-medium">
-                          Inc. {euro(s.importo_incassato)}
+                          Inc. {euro(incassatoDa(s))}
                         </span>
                       </div>
                     </div>
@@ -374,6 +395,9 @@ export default function Sponsor() {
               <input type="number" step="0.01" min="0" value={modal.dati.importo_incassato ?? ''}
                      onChange={e => setCampo('importo_incassato', e.target.value)}
                      className={inputClass} />
+              <span className="block text-[11px] text-gray-400 mt-1">
+                Vuoto o zero: per un incassato vale l'importo promesso.
+              </span>
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">

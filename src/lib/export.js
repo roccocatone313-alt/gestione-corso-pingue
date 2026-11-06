@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { euro } from './formato'
+import { riepilogoSponsor, incassatoDa } from './sponsor'
 
 // ============================================
 // Utility
@@ -52,7 +53,7 @@ export function esportaExcel(dati) {
     Email: s.email || '',
     Telefono: s.telefono || '',
     'Importo promesso': Number(s.importo_promesso) || 0,
-    'Importo incassato': Number(s.importo_incassato) || 0,
+    'Importo incassato': incassatoDa(s),
     Stato: s.stato || '',
     'Data accordo': s.data_accordo || '',
     'Data incasso': s.data_incasso || '',
@@ -100,12 +101,16 @@ export function esportaExcel(dati) {
     .filter(m => m.tipo === 'Uscita')
     .reduce((s, m) => s + (Number(m.importo) || 0), 0)
 
+  // Totali sponsor: gli stessi del Rendiconto
+  const sp = riepilogoSponsor(dati.sponsor)
   const riepilogoRows = [
     { Voce: 'Entrate totali', Valore: totEntrate },
     { Voce: 'Uscite totali', Valore: totUscite },
     { Voce: 'Saldo', Valore: totEntrate - totUscite },
-    { Voce: 'Sponsor promesso', Valore: (dati.sponsor || []).reduce((s, x) => s + (Number(x.importo_promesso) || 0), 0) },
-    { Voce: 'Sponsor incassato', Valore: (dati.sponsor || []).reduce((s, x) => s + (Number(x.importo_incassato) || 0), 0) },
+    { Voce: 'Sponsor attesi (confermati e incassati)', Valore: sp.attesi },
+    { Voce: 'Sponsor incassati', Valore: sp.incassati },
+    { Voce: 'Sponsor da incassare', Valore: sp.daIncassare },
+    { Voce: 'Sponsor in trattativa (non conteggiati)', Valore: sp.trattativa },
   ]
   const wsRiep = XLSX.utils.json_to_sheet(riepilogoRows)
   XLSX.utils.book_append_sheet(wb, wsRiep, 'Riepilogo')
@@ -141,8 +146,8 @@ export function esportaPDF(dati) {
     .filter(m => m.tipo === 'Uscita')
     .reduce((s, m) => s + (Number(m.importo) || 0), 0)
   const saldo = totEntrate - totUscite
-  const spProm = (dati.sponsor || []).reduce((s, x) => s + (Number(x.importo_promesso) || 0), 0)
-  const spInc  = (dati.sponsor || []).reduce((s, x) => s + (Number(x.importo_incassato) || 0), 0)
+  // Totali sponsor: gli stessi del Rendiconto
+  const sp = riepilogoSponsor(dati.sponsor)
 
   autoTable(doc, {
     startY: 36,
@@ -151,9 +156,10 @@ export function esportaPDF(dati) {
       ['Entrate totali', euro(totEntrate)],
       ['Uscite totali', euro(totUscite)],
       ['Saldo', euro(saldo)],
-      ['Sponsor promesso', euro(spProm)],
-      ['Sponsor incassato', euro(spInc)],
-      ['Sponsor da incassare', euro(spProm - spInc)],
+      ['Sponsor attesi (confermati e incassati)', euro(sp.attesi)],
+      ['Sponsor incassati', euro(sp.incassati)],
+      ['Sponsor da incassare', euro(sp.daIncassare)],
+      ['Sponsor in trattativa (non conteggiati)', euro(sp.trattativa)],
     ],
     styles: { fontSize: 9, cellPadding: 2 },
     headStyles: { fillColor: [14, 165, 233], textColor: 255 },
@@ -201,7 +207,7 @@ export function esportaPDF(dati) {
         (s.referente || '').slice(0, 25),
         s.stato || '',
         euro(s.importo_promesso),
-        euro(s.importo_incassato),
+        euro(incassatoDa(s)),
       ]),
       styles: { fontSize: 8, cellPadding: 1.5 },
       headStyles: { fillColor: [14, 165, 233], textColor: 255 },

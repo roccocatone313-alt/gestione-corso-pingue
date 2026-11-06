@@ -4,6 +4,7 @@ import { MACRO_SEZIONI, sezioneValida } from '../lib/macroSezioni'
 import { dataMovimentoCollegato } from '../lib/dateCassa'
 import { useAuth } from '../lib/auth'
 import { euro, dataIt } from '../lib/formato'
+import { SPONSOR_CONTEGGIATI, riepilogoSponsor, incassatoDa, daIncassareDa } from '../lib/sponsor'
 import CONFIG from '../data/rendiconto.json'
 
 // Paganti e quota per allievo: tabella impostazioni_rendiconto su Supabase.
@@ -11,9 +12,8 @@ import CONFIG from '../data/rendiconto.json'
 // Valori di riserva, usati solo se il database non risponde:
 const PREDEFINITI = { paganti: 135, quota_per_allievo: 50 }
 
-// Sponsor che contano nelle entrate previste
-const SPONSOR_CONTEGGIATI = ['Confermato', 'Incassato']
-// Sponsor mostrati in tabella, in quest'ordine
+// Ordine degli sponsor in tabella. I totali sponsor sono in src/lib/sponsor.js,
+// gli stessi della pagina Sponsor.
 const SPONSOR_IN_TABELLA = ['Incassato', 'Confermato', 'In trattativa']
 
 const COLORI_STATO = {
@@ -82,6 +82,13 @@ function Badge({ stato }) {
       {stato}
     </span>
   )
+}
+
+// Data di incasso: per chi non ha ancora pagato è solo una data prevista
+function DataIncasso({ s }) {
+  if (!s.data_incasso) return '—'
+  if (s.stato === 'Incassato') return dataIt(s.data_incasso)
+  return <span className="italic text-gray-400">prevista {dataIt(s.data_incasso)}</span>
 }
 
 function Barra({ valore, massimo, colore = 'bg-green-500' }) {
@@ -475,24 +482,19 @@ function calcola(dati) {
   const speseDaApprovare = sezioni.reduce((t, s) => t + s.daApprovare, 0)
   const differenzaCassa = uscite - spesePagate
 
-  // --- Sponsor ---
-  const sponsorLista = sponsor
-    .filter(s => SPONSOR_IN_TABELLA.includes(s.stato))
-    .sort((x, y) =>
-      SPONSOR_IN_TABELLA.indexOf(x.stato) - SPONSOR_IN_TABELLA.indexOf(y.stato) ||
-      num(y.importo_promesso) - num(x.importo_promesso))
-  const conteggiati = sponsor.filter(s => SPONSOR_CONTEGGIATI.includes(s.stato))
-  const sponsorAttesi = conteggiati
-    .reduce((t, s) => t + Math.max(num(s.importo_promesso), num(s.importo_incassato)), 0)
-  const sponsorIncassati = sponsor.reduce((t, s) => t + num(s.importo_incassato), 0)
-  const sponsorDaIncassare = sponsor
-    .filter(s => s.stato === 'Confermato')
-    .reduce((t, s) => t + Math.max(num(s.importo_promesso) - num(s.importo_incassato), 0), 0)
-  const sponsorPromessi = sponsorLista.reduce((t, s) => t + num(s.importo_promesso), 0)
-  const sponsorTrattativa = sponsor
-    .filter(s => s.stato === 'In trattativa')
-    .reduce((t, s) => t + num(s.importo_promesso), 0)
-  const nProspect = sponsor.filter(s => s.stato === 'Prospect').length
+  // --- Sponsor (stessi totali della pagina Sponsor) ---
+  const ordinaSponsor = (x, y) =>
+    SPONSOR_IN_TABELLA.indexOf(x.stato) - SPONSOR_IN_TABELLA.indexOf(y.stato) ||
+    num(y.importo_promesso) - num(x.importo_promesso)
+  const sponsorLista = sponsor.filter(s => SPONSOR_CONTEGGIATI.includes(s.stato)).sort(ordinaSponsor)
+  const sponsorInTrattativa = sponsor.filter(s => s.stato === 'In trattativa').sort(ordinaSponsor)
+  const totaliSponsor = riepilogoSponsor(sponsor)
+  const sponsorAttesi = totaliSponsor.attesi
+  const sponsorIncassati = totaliSponsor.incassati
+  const sponsorDaIncassare = totaliSponsor.daIncassare
+  const sponsorPromessi = totaliSponsor.promessi
+  const sponsorTrattativa = totaliSponsor.trattativa
+  const nProspect = totaliSponsor.nProspect
 
   // --- Quote allievi ---
   const impostazioni = dati.impostazioni || PREDEFINITI
@@ -532,8 +534,8 @@ function calcola(dati) {
   return {
     entrate, uscite, saldo, entratePer,
     sezioni, spesePreviste, spesePagate, speseDaApprovare, differenzaCassa,
-    sponsorLista, sponsorAttesi, sponsorIncassati, sponsorDaIncassare, sponsorPromessi,
-    sponsorTrattativa, nProspect, nSponsor: conteggiati.length,
+    sponsorLista, sponsorInTrattativa, sponsorAttesi, sponsorIncassati, sponsorDaIncassare,
+    sponsorPromessi, sponsorTrattativa, nProspect, nSponsor: totaliSponsor.nConteggiati,
     paganti, quota, quotePreviste, quoteIncassate, quoteAttese,
     impostazioniMancanti: !dati.impostazioni,
     entratePreviste, risultato, quotaPareggio,
@@ -752,7 +754,7 @@ export default function Rendiconto() {
                        : null} />
           <FonteCard titolo="Sponsor" colore="bg-sky-600"
                      incassato={c.sponsorIncassati} previsto={c.sponsorAttesi}
-                     nota={`${c.nSponsor} sponsor confermati · da incassare ${euro(c.sponsorDaIncassare)}`} />
+                     nota={`${c.nSponsor} sponsor confermati o incassati · da incassare ${euro(c.sponsorDaIncassare)}`} />
           <FonteCard titolo="F.I.Do" colore="bg-teal-500"
                      incassato={c.entratePer.fido} previsto={null}
                      nota="Fondazione Italiana per il Dono" />
@@ -808,7 +810,7 @@ export default function Rendiconto() {
             Sponsor
           </Titolo>
         </div>
-        {c.sponsorLista.length === 0 ? (
+        {c.sponsorLista.length === 0 && c.sponsorInTrattativa.length === 0 ? (
           <div className="px-5 pb-5 text-sm text-gray-400 italic">Nessuno sponsor confermato.</div>
         ) : (
           <div className="overflow-x-auto border-t border-gray-100">
@@ -824,35 +826,53 @@ export default function Rendiconto() {
                   <th className="text-left px-4 py-2">Data incasso</th>
                 </tr>
               </thead>
-              <tbody>
-                {c.sponsorLista.map(s => {
-                  const daIncassare = s.stato === 'Confermato'
-                    ? Math.max(num(s.importo_promesso) - num(s.importo_incassato), 0)
-                    : 0
-                  return (
+              {c.sponsorLista.length > 0 && (
+                <tbody>
+                  {c.sponsorLista.map(s => {
+                    const daIncassare = daIncassareDa(s)
+                    return (
+                      <tr key={s.id} className="border-t border-gray-100">
+                        <td className="px-4 py-2 font-medium text-gray-900">{s.nome}</td>
+                        <td className="px-4 py-2"><Badge stato={s.stato} /></td>
+                        <td className="px-4 py-2 text-right tabular-nums">{euro(s.importo_promesso)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums text-green-700">{euro(incassatoDa(s))}</td>
+                        <td className="px-4 py-2 text-right tabular-nums text-amber-700">
+                          {daIncassare > 0 ? euro(daIncassare) : '—'}
+                        </td>
+                        <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{dataIt(s.data_accordo)}</td>
+                        <td className="px-4 py-2 text-gray-600 whitespace-nowrap"><DataIncasso s={s} /></td>
+                      </tr>
+                    )
+                  })}
+                  <tr className="border-t border-gray-200 bg-gray-50 font-semibold">
+                    <td className="px-4 py-2" colSpan={2}>Totale confermati e incassati</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{euro(c.sponsorPromessi)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-green-700">{euro(c.sponsorIncassati)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-amber-700">{euro(c.sponsorDaIncassare)}</td>
+                    <td colSpan={2} />
+                  </tr>
+                </tbody>
+              )}
+              {c.sponsorInTrattativa.length > 0 && (
+                <tbody className="text-gray-500">
+                  <tr className="border-t border-gray-200">
+                    <td className="px-4 pt-3 pb-1 text-[11px] uppercase tracking-wide text-gray-400" colSpan={7}>
+                      In trattativa, non conteggiati
+                    </td>
+                  </tr>
+                  {c.sponsorInTrattativa.map(s => (
                     <tr key={s.id} className="border-t border-gray-100">
-                      <td className="px-4 py-2 font-medium text-gray-900">{s.nome}</td>
+                      <td className="px-4 py-2">{s.nome}</td>
                       <td className="px-4 py-2"><Badge stato={s.stato} /></td>
                       <td className="px-4 py-2 text-right tabular-nums">{euro(s.importo_promesso)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-green-700">{euro(s.importo_incassato)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-amber-700">
-                        {daIncassare > 0 ? euro(daIncassare) : '—'}
-                      </td>
-                      <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{dataIt(s.data_accordo)}</td>
-                      <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{dataIt(s.data_incasso)}</td>
+                      <td className="px-4 py-2 text-right">—</td>
+                      <td className="px-4 py-2 text-right">—</td>
+                      <td className="px-4 py-2 whitespace-nowrap">{dataIt(s.data_accordo)}</td>
+                      <td className="px-4 py-2 whitespace-nowrap"><DataIncasso s={s} /></td>
                     </tr>
-                  )
-                })}
-              </tbody>
-              <tfoot className="bg-gray-50 font-semibold">
-                <tr className="border-t border-gray-200">
-                  <td className="px-4 py-2" colSpan={2}>Totale</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{euro(c.sponsorPromessi)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-green-700">{euro(c.sponsorIncassati)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-amber-700">{euro(c.sponsorDaIncassare)}</td>
-                  <td colSpan={2} />
-                </tr>
-              </tfoot>
+                  ))}
+                </tbody>
+              )}
             </table>
           </div>
         )}
@@ -934,6 +954,10 @@ export default function Rendiconto() {
         <p>
           <strong>Entrate previste</strong>: sponsor confermati o incassati, quote allievi
           ({c.paganti} × {euro(c.quota)}), importi F.I.Do e altre entrate registrate.
+        </p>
+        <p>
+          <strong>Sponsor</strong>: attesi = incassati + da incassare dai confermati. Gli sponsor in
+          trattativa sono indicati a parte e non entrano nei conti. Stessi totali della pagina Sponsor.
         </p>
         <p>
           <strong>Quota per pareggiare</strong>: spese previste meno sponsor, F.I.Do e altre entrate,

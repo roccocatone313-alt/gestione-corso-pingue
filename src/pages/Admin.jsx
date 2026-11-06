@@ -7,6 +7,7 @@ import { esportaExcel, esportaPDF } from '../lib/export'
 import { euro } from '../lib/formato'
 import { MACRO_SEZIONI } from '../lib/macroSezioni'
 import { dataMovimentoCollegato, oggiISO } from '../lib/dateCassa'
+import { incassatoDa, messaggioIncasso } from '../lib/sponsor'
 
 const TABS = [
   { id: 'movimenti', label: 'Movimenti' },
@@ -135,7 +136,7 @@ export default function Admin() {
     if (tipo === 'acquisti' && valore === 'Pagato') {
       messaggioConferma = 'Impostare come "Pagato" creerà automaticamente il movimento di Uscita del saldo (totale meno le rate già pagate). Confermi?'
     } else if (tipo === 'sponsor' && valore === 'Incassato') {
-      messaggioConferma = 'Impostare come "Incassato" creerà automaticamente un movimento Entrata. Confermi?'
+      messaggioConferma = messaggioIncasso(sponsor.find(x => x.id === id) || {})
     }
     if (messaggioConferma && !confirm(messaggioConferma)) return
 
@@ -377,7 +378,7 @@ export default function Admin() {
                           <td className="py-2 px-2 font-medium">{s.nome}</td>
                           <td className="py-2 px-2">{s.referente || '—'}</td>
                           <td className="py-2 px-2 text-right">{euro(s.importo_promesso)}</td>
-                          <td className="py-2 px-2 text-right text-green-700">{euro(s.importo_incassato)}</td>
+                          <td className="py-2 px-2 text-right text-green-700">{euro(incassatoDa(s))}</td>
                           <td className="py-2 px-2">{badge(s.stato)}</td>
                           <td className="py-2 px-2">
                             <select value={s.stato || 'Prospect'}
@@ -579,6 +580,9 @@ export default function Admin() {
                 <Field label="Importo incassato">
                   <input type="number" step="0.01" value={modal.dati.importo_incassato || ''}
                          onChange={e => setCampo('importo_incassato', e.target.value)} className={inputClass} />
+                  <span className="block text-[11px] text-gray-400 mt-1">
+                    Vuoto o zero: per un incassato vale l'importo promesso.
+                  </span>
                 </Field>
               </div>
               <div className="grid grid-cols-2 gap-3">

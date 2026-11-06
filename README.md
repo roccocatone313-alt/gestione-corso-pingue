@@ -57,7 +57,8 @@ non vengono toccati.
 La tabella `movimenti` è la cassa: ogni riga è un'entrata o un'uscita. Alcune righe si inseriscono a
 mano (Inserisci → Movimento), altre le crea da solo il database:
 
-- **Sponsor** in stato *Incassato* con importo incassato maggiore di zero → entrata.
+- **Sponsor** in stato *Incassato* → entrata pari all'importo incassato; se l'incassato è vuoto o zero,
+  vale l'importo promesso. Se lo sponsor torna a un altro stato, l'entrata viene tolta.
 - **Rate di un acquisto** (Admin → Acquisti → **Pagamenti**, oppure l'anticipo in Inserisci) → ogni
   rata è un'uscita, registrata subito.
 - **Acquisto** in stato *Pagato* → uscita del **saldo**, cioè il totale meno le rate già pagate.
@@ -69,6 +70,11 @@ cassa. I movimenti automatici non si modificano da Admin: si modifica l'acquisto
 
 Le entrate fatte a mano usano le categorie **Quote allievi** e **F.I.Do**, che il Rendiconto conta
 nelle fonti di finanziamento. In fondo alla pagina Rendiconto c'è la spiegazione di ogni calcolo.
+
+I totali degli sponsor sono calcolati in un solo punto, `src/lib/sponsor.js`, e sono uguali in
+Rendiconto, pagina Sponsor ed export: **attesi** = sponsor confermati e incassati, cioè incassati più
+da incassare; **da incassare** = quanto manca dai confermati. Gli sponsor in trattativa sono mostrati a
+parte e non entrano nei conti.
 
 ## Database (Supabase)
 
