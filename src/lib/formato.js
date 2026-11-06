@@ -7,7 +7,8 @@ export function euro(n) {
   const valore = Number.isFinite(v) ? v : 0
   const [intero, decimali] = Math.abs(valore).toFixed(2).split('.')
   const segno = valore < 0 && Math.abs(valore) >= 0.005 ? '-' : ''
-  return '€ ' + segno + intero.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + decimali
+  // Spazio non divisibile: il simbolo € non finisce mai da solo su una riga
+  return '€ ' + segno + intero.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + decimali
 }
 
 // Date nel formato 05/11/2026 ('—' se mancano)
