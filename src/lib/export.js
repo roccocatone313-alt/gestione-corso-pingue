@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { euro } from './formato'
 
 // ============================================
 // Utility
@@ -8,12 +9,6 @@ import autoTable from 'jspdf-autotable'
 
 function oggiISO() {
   return new Date().toISOString().slice(0, 10)
-}
-
-function euro(n) {
-  return '€ ' + Number(n || 0).toLocaleString('it-IT', {
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
-  })
 }
 
 function ratePerAcquisto(pagamenti) {

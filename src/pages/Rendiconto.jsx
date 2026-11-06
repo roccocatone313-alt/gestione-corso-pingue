@@ -3,9 +3,13 @@ import { supabase } from '../lib/supabase'
 import { MACRO_SEZIONI, sezioneValida } from '../lib/macroSezioni'
 import { dataMovimentoCollegato } from '../lib/dateCassa'
 import { useAuth } from '../lib/auth'
+import { euro, dataIt } from '../lib/formato'
 import CONFIG from '../data/rendiconto.json'
 
-// Paganti e quota per allievo si cambiano in src/data/rendiconto.json
+// Paganti e quota per allievo: tabella impostazioni_rendiconto su Supabase.
+// Il comitato li cambia dalla pagina (riquadro Quote allievi, "Modifica quota e paganti").
+// Valori di riserva, usati solo se il database non risponde:
+const PREDEFINITI = { paganti: 135, quota_per_allievo: 50 }
 
 // Sponsor che contano nelle entrate previste
 const SPONSOR_CONTEGGIATI = ['Confermato', 'Incassato']
@@ -48,22 +52,6 @@ const STILE = `
 function num(v) {
   const n = Number(v)
   return Number.isFinite(n) ? n : 0
-}
-
-// Formato italiano con il punto delle migliaia sempre presente
-// (toLocaleString non lo mette sotto i 10.000: "1220,00" invece di "1.220,00").
-function euro(n) {
-  const v = num(n)
-  const [intero, decimali] = Math.abs(v).toFixed(2).split('.')
-  const segno = v < 0 && Math.abs(v) >= 0.005 ? '-' : ''
-  return '€ ' + segno + intero.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + decimali
-}
-
-function dataIt(d) {
-  if (!d) return '—'
-  const x = new Date(d)
-  if (isNaN(x.getTime())) return '—'
-  return x.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 function dataOra(d) {
@@ -132,7 +120,7 @@ function Titolo({ children, sotto }) {
   )
 }
 
-function FonteCard({ titolo, incassato, previsto, nota, colore }) {
+function FonteCard({ titolo, incassato, previsto, nota, colore, azione }) {
   const haPrevisto = previsto != null && previsto > 0
   return (
     <div className="blocco bg-white rounded-xl p-5 shadow-sm">
@@ -150,6 +138,7 @@ function FonteCard({ titolo, incassato, previsto, nota, colore }) {
         </div>
       )}
       {nota && <div className="text-xs text-gray-500 mt-2">{nota}</div>}
+      {azione}
     </div>
   )
 }
@@ -191,6 +180,73 @@ function Copertura({ spese, parti, mancano }) {
         )}
       </div>
     </div>
+  )
+}
+
+function ModificaQuota({ paganti, quota, onSalva }) {
+  const [aperto, setAperto] = useState(false)
+  const [nPaganti, setNPaganti] = useState('')
+  const [nQuota, setNQuota] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const [errore, setErrore] = useState('')
+
+  function apri() {
+    setNPaganti(String(paganti))
+    setNQuota(String(quota))
+    setErrore('')
+    setAperto(true)
+  }
+
+  async function salva(e) {
+    e.preventDefault()
+    const p = Number(nPaganti)
+    const q = Number(nQuota)
+    if (!Number.isInteger(p) || p < 0) { setErrore('Numero di paganti non valido.'); return }
+    if (!Number.isFinite(q) || q < 0) { setErrore('Quota non valida.'); return }
+    setSalvando(true)
+    const problema = await onSalva(p, q)
+    setSalvando(false)
+    if (problema) { setErrore(problema); return }
+    setAperto(false)
+  }
+
+  if (!aperto) {
+    return (
+      <button type="button" onClick={apri}
+              className="no-print mt-3 text-xs font-semibold text-sky-700 hover:underline">
+        Modifica quota e paganti
+      </button>
+    )
+  }
+
+  const campo = 'mt-1 w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30'
+  return (
+    <form onSubmit={salva} className="no-print mt-3 space-y-2 border-t border-gray-100 pt-3">
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block text-xs font-semibold text-gray-600">
+          Paganti
+          <input type="number" min="0" step="1" required value={nPaganti}
+                 onChange={e => setNPaganti(e.target.value)} className={campo} />
+        </label>
+        <label className="block text-xs font-semibold text-gray-600">
+          Quota totale a testa (€)
+          <input type="number" min="0" step="0.01" required value={nQuota}
+                 onChange={e => setNQuota(e.target.value)} className={campo} />
+        </label>
+      </div>
+      <p className="text-[11px] text-gray-500">Con più rate, scrivi il totale che ogni allievo deve versare.</p>
+      {errore && <div className="text-xs text-red-700">{errore}</div>}
+      <div className="flex gap-2">
+        <button disabled={salvando}
+                className="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:bg-gray-300 text-white text-xs font-semibold">
+          {salvando ? 'Salvataggio...' : 'Salva'}
+        </button>
+        <button type="button" onClick={() => setAperto(false)}
+                className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+          Annulla
+        </button>
+      </div>
+    </form>
   )
 }
 
@@ -439,8 +495,9 @@ function calcola(dati) {
   const nProspect = sponsor.filter(s => s.stato === 'Prospect').length
 
   // --- Quote allievi ---
-  const paganti = num(CONFIG.paganti)
-  const quota = num(CONFIG.quotaPerAllievo)
+  const impostazioni = dati.impostazioni || PREDEFINITI
+  const paganti = num(impostazioni.paganti)
+  const quota = num(impostazioni.quota_per_allievo)
   const quotePreviste = paganti * quota
   const quoteIncassate = entratePer.quote
   const quoteAttese = Math.max(quotePreviste, quoteIncassate)
@@ -472,13 +529,13 @@ function calcola(dati) {
     return { ...m, voce: voceMovimento(m), saldoProgressivo: progressivo }
   })
 
-
   return {
     entrate, uscite, saldo, entratePer,
     sezioni, spesePreviste, spesePagate, speseDaApprovare, differenzaCassa,
     sponsorLista, sponsorAttesi, sponsorIncassati, sponsorDaIncassare, sponsorPromessi,
     sponsorTrattativa, nProspect, nSponsor: conteggiati.length,
     paganti, quota, quotePreviste, quoteIncassate, quoteAttese,
+    impostazioniMancanti: !dati.impostazioni,
     entratePreviste, risultato, quotaPareggio,
     registro,
   }
@@ -499,12 +556,13 @@ export default function Rendiconto() {
 
   async function carica() {
     setErrore(null)
-    const [mov, acq, sp, pag] = await Promise.all([
+    const [mov, acq, sp, pag, imp] = await Promise.all([
       supabase.from('movimenti').select('*')
         .order('data', { ascending: true }).order('id', { ascending: true }),
       supabase.from('acquisti').select('*'),
       supabase.from('sponsor').select('*'),
       supabase.from('pagamenti_acquisti').select('*').order('data', { ascending: true }),
+      supabase.from('impostazioni_rendiconto').select('*').eq('id', 1).maybeSingle(),
     ])
     const err = mov.error || acq.error || sp.error || pag.error
     if (err) { setErrore(err.message); return }
@@ -513,6 +571,8 @@ export default function Rendiconto() {
       acquisti: acq.data || [],
       sponsor: sp.data || [],
       pagamenti: pag.data || [],
+      // Se le impostazioni non si leggono, il calcolo usa i valori di riserva e lo segnala
+      impostazioni: imp.error ? null : (imp.data || null),
     })
     setAggiornato(new Date())
   }
@@ -520,6 +580,18 @@ export default function Rendiconto() {
   useEffect(() => { carica() }, [])
 
   const c = useMemo(() => (dati ? calcola(dati) : null), [dati])
+
+  // Restituisce un messaggio di errore, oppure null se è andato tutto bene
+  async function salvaQuota(paganti, quota) {
+    const campi = { paganti, quota_per_allievo: quota, aggiornato_il: new Date().toISOString() }
+    const { data, error } = await supabase
+      .from('impostazioni_rendiconto').update(campi).eq('id', 1).select()
+    if (error) return 'Non salvato: ' + error.message
+    if (!data || data.length === 0) return 'Non salvato: solo il comitato può modificare quota e paganti.'
+    setDati(d => ({ ...d, impostazioni: { ...(d.impostazioni || {}), ...data[0] } }))
+    mostra('ok', 'Quota e paganti aggiornati.')
+    return null
+  }
 
   function mostra(stato, testo) {
     setMsg({ stato, testo })
@@ -674,7 +746,10 @@ export default function Rendiconto() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <FonteCard titolo="Quote allievi" colore="bg-sky-300"
                      incassato={c.quoteIncassate} previsto={c.quotePreviste}
-                     nota={`${c.paganti} paganti × ${euro(c.quota)}`} />
+                     nota={`${c.paganti} paganti × ${euro(c.quota)}`}
+                     azione={puoModificare
+                       ? <ModificaQuota paganti={c.paganti} quota={c.quota} onSalva={salvaQuota} />
+                       : null} />
           <FonteCard titolo="Sponsor" colore="bg-sky-600"
                      incassato={c.sponsorIncassati} previsto={c.sponsorAttesi}
                      nota={`${c.nSponsor} sponsor confermati · da incassare ${euro(c.sponsorDaIncassare)}`} />
@@ -868,6 +943,12 @@ export default function Rendiconto() {
           <p className="text-amber-700">
             <strong>Controllo</strong>: le uscite di cassa ({euro(c.uscite)}) non coincidono con le spese
             pagate ({euro(c.spesePagate)}). Differenza: {euro(c.differenzaCassa)}.
+          </p>
+        )}
+        {c.impostazioniMancanti && (
+          <p className="text-amber-700">
+            <strong>Attenzione</strong>: quota e paganti non letti dal database, uso i valori di riserva
+            ({c.paganti} × {euro(c.quota)}).
           </p>
         )}
         <p>Dati letti in tempo reale dal database del comitato.</p>

@@ -1,23 +1,10 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { oggiISO } from '../lib/dateCassa'
+import { euro, dataIt } from '../lib/formato'
 
 const inputClass =
   'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500'
-
-function euro(n) {
-  const v = Number(n) || 0
-  const [intero, decimali] = Math.abs(v).toFixed(2).split('.')
-  const segno = v < 0 && Math.abs(v) >= 0.005 ? '-' : ''
-  return '€ ' + segno + intero.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + decimali
-}
-
-function dataIt(d) {
-  if (!d) return '—'
-  const x = new Date(d)
-  if (isNaN(x.getTime())) return '—'
-  return x.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
 
 // Rate (pagamenti parziali) di un acquisto.
 // Ogni rata esce subito dalla cassa; quando l'acquisto diventa "Pagato"

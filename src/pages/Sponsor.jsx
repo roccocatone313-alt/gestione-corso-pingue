@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase'
 import Modal from '../components/Modal'
 import InfoBox from '../components/InfoBox'
 import { dataMovimentoCollegato, oggiISO } from '../lib/dateCassa'
+import { euro } from '../lib/formato'
+import { useAuth } from '../lib/auth'
 
 const COLONNE = [
   { stato: 'Prospect',      colore: 'bg-gray-50',   bordo: 'border-gray-300',  testo: 'text-gray-700',   totale: 'text-gray-800' },
@@ -16,12 +18,6 @@ const STATI = COLONNE.map(c => c.stato)
 
 const inputClass =
   'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500'
-
-function euro(n) {
-  return '€ ' + Number(n || 0).toLocaleString('it-IT', {
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
-  })
-}
 
 function Field({ label, children }) {
   return (
@@ -41,6 +37,8 @@ export default function Sponsor() {
 
   const [modal, setModal] = useState(null)
   const [salvando, setSalvando] = useState(false)
+  // Chi non ha fatto l'accesso del comitato vede la pagina in sola lettura
+  const { puoModificare } = useAuth()
 
   function mostraMsg(stato, testo) {
     setMsg({ stato, testo })
@@ -205,8 +203,12 @@ export default function Sponsor() {
         <p>• <strong>Confermato</strong> — ha detto sì</p>
         <p>• <strong>Incassato</strong> — ha pagato (crea un'Entrata automatica)</p>
         <p>• <strong>Perso</strong> — non se ne fa nulla</p>
-        <p><strong>Su desktop</strong> trascini le card da una colonna all'altra. <strong>Su mobile</strong> clicchi la card e cambi stato dal menu.</p>
-        <p>Quando metti "Incassato", l'app registra da sola l'entrata in contabilità.</p>
+        {puoModificare && (
+          <>
+            <p><strong>Su desktop</strong> trascini le card da una colonna all'altra. <strong>Su mobile</strong> clicchi la card e cambi stato dal menu.</p>
+            <p>Quando metti "Incassato", l'app registra da sola l'entrata in contabilità.</p>
+          </>
+        )}
       </InfoBox>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -228,15 +230,18 @@ export default function Sponsor() {
         <div>
           <h2 className="text-lg font-bold text-gray-800">Pipeline sponsor</h2>
           <p className="text-sm text-gray-500">
-            {sponsor.length} sponsor in totale — trascina le card su desktop, tocca la card su mobile per modificare
+            {sponsor.length} sponsor in totale
+            {puoModificare && ' — trascina le card su desktop, tocca la card su mobile per modificare'}
           </p>
         </div>
-        <button
-          onClick={nuovoSponsor}
-          className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white text-sm font-semibold rounded-lg shadow-sm"
-        >
-          + Nuovo sponsor
-        </button>
+        {puoModificare && (
+          <button
+            onClick={nuovoSponsor}
+            className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white text-sm font-semibold rounded-lg shadow-sm"
+          >
+            + Nuovo sponsor
+          </button>
+        )}
       </div>
 
       {msg.stato && (
@@ -262,9 +267,9 @@ export default function Sponsor() {
             return (
               <div
                 key={col.stato}
-                onDragOver={e => onDragOver(e, col.stato)}
-                onDragLeave={onDragLeave}
-                onDrop={e => onDrop(e, col.stato)}
+                onDragOver={puoModificare ? e => onDragOver(e, col.stato) : undefined}
+                onDragLeave={puoModificare ? onDragLeave : undefined}
+                onDrop={puoModificare ? e => onDrop(e, col.stato) : undefined}
                 className={`rounded-xl border-2 ${col.bordo} ${col.colore} p-3 min-h-[200px] transition ${
                   isOver ? 'ring-4 ring-sky-300 scale-[1.01]' : ''
                 }`}
@@ -283,20 +288,22 @@ export default function Sponsor() {
                   {cards.map(s => (
                     <div
                       key={s.id}
-                      draggable
-                      onDragStart={e => onDragStart(e, s.id)}
-                      onDragEnd={onDragEnd}
-                      onClick={() => apriModifica(s)}
-                      className={`bg-white rounded-lg p-3 shadow-sm border border-gray-100 cursor-grab active:cursor-grabbing hover:shadow-md transition relative ${
-                        draggedId === s.id ? 'opacity-40' : ''
-                      }`}
+                      draggable={puoModificare}
+                      onDragStart={puoModificare ? e => onDragStart(e, s.id) : undefined}
+                      onDragEnd={puoModificare ? onDragEnd : undefined}
+                      onClick={puoModificare ? () => apriModifica(s) : undefined}
+                      className={`bg-white rounded-lg p-3 shadow-sm border border-gray-100 transition relative ${
+                        puoModificare ? 'cursor-grab active:cursor-grabbing hover:shadow-md' : 'cursor-default'
+                      } ${draggedId === s.id ? 'opacity-40' : ''}`}
                     >
-                      <span
-                        className="absolute top-2 right-2 text-gray-300 hover:text-sky-500 text-xs"
-                        title="Tocca per modificare"
-                      >
-                        ✎
-                      </span>
+                      {puoModificare && (
+                        <span
+                          className="absolute top-2 right-2 text-gray-300 hover:text-sky-500 text-xs"
+                          title="Tocca per modificare"
+                        >
+                          ✎
+                        </span>
+                      )}
                       <div className="font-semibold text-sm text-gray-800 truncate pr-6">
                         {s.nome}
                       </div>
@@ -328,7 +335,7 @@ export default function Sponsor() {
         </div>
       )}
 
-      {modal && (
+      {modal && puoModificare && (
         <Modal
           titolo={modal.dati.id ? 'Sponsor: ' + modal.dati.nome : 'Nuovo sponsor'}
           onClose={() => setModal(null)}

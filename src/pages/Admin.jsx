@@ -4,6 +4,7 @@ import Modal from '../components/Modal'
 import PagamentiAcquisto from '../components/PagamentiAcquisto'
 import InfoBox from '../components/InfoBox'
 import { esportaExcel, esportaPDF } from '../lib/export'
+import { euro } from '../lib/formato'
 import { MACRO_SEZIONI } from '../lib/macroSezioni'
 import { dataMovimentoCollegato, oggiISO } from '../lib/dateCassa'
 
@@ -22,12 +23,6 @@ const STATI_ACQUISTO = ['Da approvare','Approvato','Ordinato','Ricevuto','Pagato
 
 const inputClass =
   'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500'
-
-function euro(n) {
-  return '€ ' + Number(n || 0).toLocaleString('it-IT', {
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
-  })
-}
 
 function Field({ label, children }) {
   return (
