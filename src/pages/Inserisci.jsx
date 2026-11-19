@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { STATI_SPONSOR, STATO_FIDO, messaggioIncasso } from '../lib/sponsor'
+import SceltaFido from '../components/SceltaFido'
 import InfoBox from '../components/InfoBox'
 import { MACRO_SEZIONI } from '../lib/macroSezioni'
 
@@ -13,7 +15,6 @@ const CATEGORIE = ['Sponsor','Materiale','Trasporti','Eventi','Cancelleria','Rim
 // Per i movimenti: quote degli allievi e soldi arrivati tramite F.I.Do
 const CATEGORIE_MOVIMENTO = ['Quote allievi', 'F.I.Do', ...CATEGORIE]
 const CELLULE   = ['Sponsor','Budget','Acquisti']
-const STATI_SPONSOR  = ['Prospect','In trattativa','Confermato','Incassato','Perso']
 const STATI_ACQUISTO = ['Da approvare','Approvato','Ordinato','Ricevuto','Pagato','Rifiutato']
 
 function oggi() {
@@ -82,26 +83,33 @@ export default function Inserisci() {
     stato: 'Prospect', data_accordo: '', data_incasso: '', note: '',
   })
 
+  // Sponsor appena creato da portare a "Pagato tramite F.I.Do"
+  const [sceltaFido, setSceltaFido] = useState(null)
+
   async function salvaSponsor(e) {
     e.preventDefault()
     if (!sp.nome.trim()) { mostraMsg('errore', 'Nome sponsor obbligatorio.'); return }
+    // F.I.Do: lo creo come confermato, poi si sceglie l'entrata nella finestra apposita
+    const versoFido = sp.stato === STATO_FIDO
+    if (sp.stato === 'Incassato' && !confirm(messaggioIncasso(sp))) return
     setInvio(true)
-    const { error } = await supabase.from('sponsor').insert({
+    const { data: creato, error } = await supabase.from('sponsor').insert({
       nome: sp.nome.trim(),
       referente: sp.referente.trim(),
       email: sp.email.trim(),
       telefono: sp.telefono.trim(),
       importo_promesso: Number(sp.importo_promesso) || 0,
       importo_incassato: Number(sp.importo_incassato) || 0,
-      stato: sp.stato,
+      stato: versoFido ? 'Confermato' : sp.stato,
       data_accordo: sp.data_accordo || null,
       data_incasso: sp.data_incasso || (sp.stato === 'Incassato' ? oggi() : null),
       note: sp.note.trim(),
       created_by: 'web',
-    })
+    }).select().single()
     setInvio(false)
     if (error) { mostraMsg('errore', error.message); return }
-    mostraMsg('ok', 'Sponsor registrato.')
+    if (versoFido && creato) setSceltaFido(creato)
+    else mostraMsg('ok', 'Sponsor registrato.')
     setSp({
       ...sp,
       nome: '', referente: '', email: '', telefono: '',
@@ -178,10 +186,10 @@ export default function Inserisci() {
     <div className="max-w-2xl mx-auto space-y-4">
       <InfoBox id="inserisci" titolo="Inserisci — registra tutto da qui">
         <p>Qui registri le novità, in 3 schede:</p>
-        <p>• <strong>Movimento</strong> — soldi che entrano o escono senza un acquisto a monte (es. quote allievi, F.I.Do)</p>
+        <p>• <strong>Movimento</strong> — soldi che entrano o escono senza un acquisto a monte (es. quote allievi, F.I.Do di chi non è tra gli sponsor)</p>
         <p>• <strong>Sponsor</strong> — un nuovo possibile finanziatore</p>
         <p>• <strong>Acquisto</strong> — una spesa. Se hai già pagato un anticipo, indicalo qui; le rate successive le aggiungi da Admin → Acquisti → Pagamenti</p>
-        <p>Quando un acquisto diventa "Pagato" o uno sponsor "Incassato", il movimento di cassa <strong>si crea da solo</strong>: non duplicarlo a mano.</p>
+        <p>Quando un acquisto diventa "Pagato" o uno sponsor "Incassato" o "Pagato tramite F.I.Do", il movimento di cassa <strong>si crea da solo</strong>: non duplicarlo a mano.</p>
       </InfoBox>
 
       <div className="bg-white rounded-xl p-2 shadow-sm flex flex-wrap gap-1">
@@ -201,6 +209,15 @@ export default function Inserisci() {
       </div>
 
       {msg.stato && <Msg stato={msg.stato} testo={msg.testo} />}
+
+      {sceltaFido && (
+        <SceltaFido sponsor={sceltaFido}
+                    onChiudi={() => {
+                      setSceltaFido(null)
+                      mostraMsg('ok', 'Sponsor registrato come confermato: portalo a "Pagato tramite F.I.Do" quando vuoi.')
+                    }}
+                    onFatto={testo => { setSceltaFido(null); mostraMsg('ok', testo) }} />
+      )}
 
       {/* MOVIMENTO */}
       {tab === 'movimento' && (

@@ -4,7 +4,7 @@ import { MACRO_SEZIONI, sezioneValida } from '../lib/macroSezioni'
 import { dataMovimentoCollegato } from '../lib/dateCassa'
 import { useAuth } from '../lib/auth'
 import { euro, dataIt } from '../lib/formato'
-import { SPONSOR_CONTEGGIATI, riepilogoSponsor, incassatoDa, daIncassareDa } from '../lib/sponsor'
+import { SPONSOR_CONTEGGIATI, STATO_FIDO, riepilogoSponsor, incassatoDa, daIncassareDa, pagato } from '../lib/sponsor'
 import CONFIG from '../data/rendiconto.json'
 
 // Paganti e quota per allievo: tabella impostazioni_rendiconto su Supabase.
@@ -19,6 +19,7 @@ const SPONSOR_IN_TABELLA = ['Incassato', 'Confermato', 'In trattativa']
 const COLORI_STATO = {
   'Pagato': 'bg-green-100 text-green-800',
   'Incassato': 'bg-green-100 text-green-800',
+  'Pagato tramite F.I.Do': 'bg-teal-100 text-teal-800',
   'Completata': 'bg-green-100 text-green-800',
   'Ricevuto': 'bg-sky-100 text-sky-800',
   'Ordinato': 'bg-sky-100 text-sky-800',
@@ -87,7 +88,7 @@ function Badge({ stato }) {
 // Data di incasso: per chi non ha ancora pagato è solo una data prevista
 function DataIncasso({ s }) {
   if (!s.data_incasso) return '—'
-  if (s.stato === 'Incassato') return dataIt(s.data_incasso)
+  if (pagato(s)) return dataIt(s.data_incasso)
   return <span className="italic text-gray-400">prevista {dataIt(s.data_incasso)}</span>
 }
 
@@ -488,6 +489,7 @@ function calcola(dati) {
     num(y.importo_promesso) - num(x.importo_promesso)
   const sponsorLista = sponsor.filter(s => SPONSOR_CONTEGGIATI.includes(s.stato)).sort(ordinaSponsor)
   const sponsorInTrattativa = sponsor.filter(s => s.stato === 'In trattativa').sort(ordinaSponsor)
+  const sponsorViaFido = sponsor.filter(s => s.stato === STATO_FIDO).sort(ordinaSponsor)
   const totaliSponsor = riepilogoSponsor(sponsor)
   const sponsorAttesi = totaliSponsor.attesi
   const sponsorIncassati = totaliSponsor.incassati
@@ -534,8 +536,9 @@ function calcola(dati) {
   return {
     entrate, uscite, saldo, entratePer,
     sezioni, spesePreviste, spesePagate, speseDaApprovare, differenzaCassa,
-    sponsorLista, sponsorInTrattativa, sponsorAttesi, sponsorIncassati, sponsorDaIncassare,
+    sponsorLista, sponsorInTrattativa, sponsorViaFido, sponsorAttesi, sponsorIncassati, sponsorDaIncassare,
     sponsorPromessi, sponsorTrattativa, nProspect, nSponsor: totaliSponsor.nConteggiati,
+    sponsorFido: totaliSponsor.fido, nSponsorFido: totaliSponsor.nFido,
     paganti, quota, quotePreviste, quoteIncassate, quoteAttese,
     impostazioniMancanti: !dati.impostazioni,
     entratePreviste, risultato, quotaPareggio,
@@ -757,7 +760,9 @@ export default function Rendiconto() {
                      nota={`${c.nSponsor} sponsor confermati o incassati · da incassare ${euro(c.sponsorDaIncassare)}`} />
           <FonteCard titolo="F.I.Do" colore="bg-teal-500"
                      incassato={c.entratePer.fido} previsto={null}
-                     nota="Fondazione Italiana per il Dono" />
+                     nota={c.nSponsorFido > 0
+                       ? `Fondazione Italiana per il Dono · di cui ${euro(c.sponsorFido)} da ${c.nSponsorFido} sponsor`
+                       : 'Fondazione Italiana per il Dono'} />
         </div>
         {(c.entratePer.altre > 0 || c.sponsorTrattativa > 0) && (
           <div className="mt-3 text-sm text-gray-600 space-y-1">
@@ -810,7 +815,7 @@ export default function Rendiconto() {
             Sponsor
           </Titolo>
         </div>
-        {c.sponsorLista.length === 0 && c.sponsorInTrattativa.length === 0 ? (
+        {c.sponsorLista.length === 0 && c.sponsorInTrattativa.length === 0 && c.sponsorViaFido.length === 0 ? (
           <div className="px-5 pb-5 text-sm text-gray-400 italic">Nessuno sponsor confermato.</div>
         ) : (
           <div className="overflow-x-auto border-t border-gray-100">
@@ -851,6 +856,26 @@ export default function Rendiconto() {
                     <td className="px-4 py-2 text-right tabular-nums text-amber-700">{euro(c.sponsorDaIncassare)}</td>
                     <td colSpan={2} />
                   </tr>
+                </tbody>
+              )}
+              {c.sponsorViaFido.length > 0 && (
+                <tbody>
+                  <tr className="border-t border-gray-200">
+                    <td className="px-4 pt-3 pb-1 text-[11px] uppercase tracking-wide text-teal-700" colSpan={7}>
+                      Pagati tramite F.I.Do · {euro(c.sponsorFido)}, contati nella voce F.I.Do
+                    </td>
+                  </tr>
+                  {c.sponsorViaFido.map(s => (
+                    <tr key={s.id} className="border-t border-gray-100">
+                      <td className="px-4 py-2 font-medium text-gray-900">{s.nome}</td>
+                      <td className="px-4 py-2"><Badge stato={s.stato} /></td>
+                      <td className="px-4 py-2 text-right tabular-nums">{euro(s.importo_promesso)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-teal-700">{euro(incassatoDa(s))}</td>
+                      <td className="px-4 py-2 text-right">—</td>
+                      <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{dataIt(s.data_accordo)}</td>
+                      <td className="px-4 py-2 text-gray-600 whitespace-nowrap"><DataIncasso s={s} /></td>
+                    </tr>
+                  ))}
                 </tbody>
               )}
               {c.sponsorInTrattativa.length > 0 && (
@@ -957,7 +982,8 @@ export default function Rendiconto() {
         </p>
         <p>
           <strong>Sponsor</strong>: attesi = incassati + da incassare dai confermati. Gli sponsor in
-          trattativa sono indicati a parte e non entrano nei conti. Stessi totali della pagina Sponsor.
+          trattativa sono indicati a parte e non entrano nei conti. Quelli pagati tramite F.I.Do sono
+          contati nella voce F.I.Do, con il loro nome. Stessi totali della pagina Sponsor.
         </p>
         <p>
           <strong>Quota per pareggiare</strong>: spese previste meno sponsor, F.I.Do e altre entrate,

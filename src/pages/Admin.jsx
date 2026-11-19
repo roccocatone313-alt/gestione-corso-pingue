@@ -7,7 +7,9 @@ import { esportaExcel, esportaPDF } from '../lib/export'
 import { euro } from '../lib/formato'
 import { MACRO_SEZIONI } from '../lib/macroSezioni'
 import { dataMovimentoCollegato, oggiISO } from '../lib/dateCassa'
-import { incassatoDa, messaggioIncasso } from '../lib/sponsor'
+import { incassatoDa, messaggioIncasso, messaggioUscitaCassa, STATO_FIDO, STATI_PAGATI,
+         STATI_SPONSOR } from '../lib/sponsor'
+import SceltaFido from '../components/SceltaFido'
 
 const TABS = [
   { id: 'movimenti', label: 'Movimenti' },
@@ -19,7 +21,6 @@ const CATEGORIE      = ['Sponsor','Materiale','Trasporti','Eventi','Cancelleria'
 // Per i movimenti: quote degli allievi e soldi arrivati tramite F.I.Do
 const CATEGORIE_MOVIMENTO = ['Quote allievi', 'F.I.Do', ...CATEGORIE]
 const CELLULE        = ['Sponsor','Budget','Acquisti']
-const STATI_SPONSOR  = ['Prospect','In trattativa','Confermato','Incassato','Perso']
 const STATI_ACQUISTO = ['Da approvare','Approvato','Ordinato','Ricevuto','Pagato','Rifiutato']
 
 const inputClass =
@@ -40,6 +41,7 @@ function badge(stato) {
     'In trattativa': 'bg-yellow-100 text-yellow-800',
     'Confermato':    'bg-blue-100 text-blue-800',
     'Incassato':     'bg-green-100 text-green-800',
+    'Pagato tramite F.I.Do': 'bg-teal-100 text-teal-800',
     'Perso':         'bg-red-100 text-red-800',
     'Da approvare':  'bg-orange-100 text-orange-800',
     'Approvato':     'bg-blue-100 text-blue-800',
@@ -88,6 +90,8 @@ export default function Admin() {
 
   const [modal, setModal] = useState(null)
   const [salvando, setSalvando] = useState(false)
+  // Sponsor da portare a "Pagato tramite F.I.Do" (finestra di scelta dell'entrata)
+  const [sceltaFido, setSceltaFido] = useState(null)
 
   function mostraMsg(stato, testo) {
     setMsg({ stato, testo })
@@ -132,6 +136,13 @@ export default function Admin() {
   }
 
   async function cambiaStato(tipo, id, campo, valore) {
+    if (tipo === 'sponsor') {
+      const attuale = sponsor.find(x => x.id === id) || {}
+      // F.I.Do: prima si sceglie se la donazione è già registrata
+      if (valore === STATO_FIDO) { setSceltaFido(attuale); return }
+      const uscita = messaggioUscitaCassa(attuale, valore)
+      if (uscita && !confirm(uscita)) return
+    }
     let messaggioConferma = null
     if (tipo === 'acquisti' && valore === 'Pagato') {
       messaggioConferma = 'Impostare come "Pagato" creerà automaticamente il movimento di Uscita del saldo (totale meno le rate già pagate). Confermi?'
@@ -159,10 +170,20 @@ export default function Admin() {
 
   async function salvaModifica() {
     if (!modal) return
-    setSalvando(true)
     const { tipo, dati } = modal
     const id = dati.id
+    // Sponsor: passaggio a "Pagato tramite F.I.Do" (salvo il resto con lo stato
+    // di prima, poi si sceglie l'entrata) e conferma se un'entrata esce dalla cassa
+    const prima = tipo === 'sponsor' ? sponsor.find(x => x.id === id) : null
+    const versoFido = tipo === 'sponsor' && dati.stato === STATO_FIDO && prima && prima.stato !== STATO_FIDO
+    if (prima && !versoFido) {
+      const uscita = messaggioUscitaCassa(prima, dati.stato)
+      if (uscita && !confirm(uscita)) return
+      if (dati.stato === 'Incassato' && prima.stato !== 'Incassato' && !confirm(messaggioIncasso(dati))) return
+    }
+    setSalvando(true)
     const payload = { ...dati }
+    if (versoFido) payload.stato = prima.stato
     delete payload.id
     delete payload.created_at
     delete payload.origine
@@ -176,15 +197,20 @@ export default function Admin() {
     if (tipo === 'acquisti' && payload.stato === 'Pagato' && !payload.data_pagamento) {
       payload.data_pagamento = (await dataMovimentoCollegato('Acquisto #' + id)) || oggiISO()
     }
-    if (tipo === 'sponsor' && payload.stato === 'Incassato' && !payload.data_incasso) {
+    if (tipo === 'sponsor' && STATI_PAGATI.includes(payload.stato) && !payload.data_incasso) {
       payload.data_incasso = (await dataMovimentoCollegato('Sponsor #' + id)) || oggiISO()
     }
 
     const { error } = await supabase.from(tipo).update(payload).eq('id', id)
     setSalvando(false)
     if (error) { mostraMsg('errore', error.message); return }
-    mostraMsg('ok', 'Modifica salvata.')
     setModal(null)
+    if (versoFido) {
+      setSceltaFido({ ...prima, ...payload, id })
+      caricaTutto()
+      return
+    }
+    mostraMsg('ok', 'Modifica salvata.')
     caricaTutto()
   }
 
@@ -674,6 +700,12 @@ export default function Admin() {
           )}
 
         </Modal>
+      )}
+
+      {sceltaFido && (
+        <SceltaFido sponsor={sceltaFido}
+                    onChiudi={() => setSceltaFido(null)}
+                    onFatto={testo => { setSceltaFido(null); mostraMsg('ok', testo); caricaTutto() }} />
       )}
 
       {pagamentiDi && (() => {

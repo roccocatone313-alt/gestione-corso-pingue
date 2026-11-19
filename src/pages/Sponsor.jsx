@@ -5,13 +5,15 @@ import InfoBox from '../components/InfoBox'
 import { dataMovimentoCollegato, oggiISO } from '../lib/dateCassa'
 import { euro } from '../lib/formato'
 import { useAuth } from '../lib/auth'
-import { riepilogoSponsor, incassatoDa, messaggioIncasso } from '../lib/sponsor'
+import { riepilogoSponsor, incassatoDa, messaggioIncasso, messaggioUscitaCassa, STATO_FIDO } from '../lib/sponsor'
+import SceltaFido from '../components/SceltaFido'
 
 const COLONNE = [
   { stato: 'Prospect',      colore: 'bg-gray-50',   bordo: 'border-gray-300',  testo: 'text-gray-700',   totale: 'text-gray-800' },
   { stato: 'In trattativa', colore: 'bg-yellow-50', bordo: 'border-yellow-300',testo: 'text-yellow-800', totale: 'text-yellow-900' },
   { stato: 'Confermato',    colore: 'bg-blue-50',   bordo: 'border-blue-300',  testo: 'text-blue-800',   totale: 'text-blue-900' },
   { stato: 'Incassato',     colore: 'bg-green-50',  bordo: 'border-green-300', testo: 'text-green-800',  totale: 'text-green-900' },
+  { stato: STATO_FIDO,      colore: 'bg-teal-50',   bordo: 'border-teal-300',  testo: 'text-teal-800',   totale: 'text-teal-900' },
   { stato: 'Perso',         colore: 'bg-red-50',    bordo: 'border-red-300',   testo: 'text-red-800',    totale: 'text-red-900' },
 ]
 
@@ -54,6 +56,8 @@ export default function Sponsor() {
 
   const [modal, setModal] = useState(null)
   const [salvando, setSalvando] = useState(false)
+  // Sponsor da portare a "Pagato tramite F.I.Do" (finestra di scelta dell'entrata)
+  const [sceltaFido, setSceltaFido] = useState(null)
   // Chi non ha fatto l'accesso del comitato vede la pagina in sola lettura
   const { puoModificare } = useAuth()
 
@@ -108,8 +112,13 @@ export default function Sponsor() {
   }
 
   async function cambiaStato(id, nuovoStato) {
+    const attuale = sponsor.find(x => x.id === id) || {}
+    // F.I.Do: prima si sceglie se la donazione è già registrata
+    if (nuovoStato === STATO_FIDO) { setSceltaFido(attuale); return }
+    const uscita = messaggioUscitaCassa(attuale, nuovoStato)
+    if (uscita && !confirm(uscita)) return
     if (nuovoStato === 'Incassato') {
-      const ok = confirm(messaggioIncasso(sponsor.find(x => x.id === id) || {}))
+      const ok = confirm(messaggioIncasso(attuale))
       if (!ok) return
     }
     const campi = { stato: nuovoStato }
@@ -148,14 +157,15 @@ export default function Sponsor() {
     const d = modal.dati
     if (!d.nome || !d.nome.trim()) { mostraMsg('errore', 'Nome obbligatorio.'); return }
 
-    if (d.id && d.stato === 'Incassato') {
-      const s = sponsor.find(x => x.id === d.id)
-      if (s && s.stato !== 'Incassato') {
-        const ok = confirm(messaggioIncasso(d))
-        if (!ok) return
-      }
+    const prima = d.id ? sponsor.find(x => x.id === d.id) : null
+    // Passaggio a "Pagato tramite F.I.Do": salvo il resto con lo stato di prima,
+    // poi si sceglie l'entrata F.I.Do nella finestra apposita.
+    const versoFido = d.stato === STATO_FIDO && (!prima || prima.stato !== STATO_FIDO)
+    if (prima && !versoFido) {
+      const uscita = messaggioUscitaCassa(prima, d.stato)
+      if (uscita && !confirm(uscita)) return
     }
-    if (!d.id && d.stato === 'Incassato') {
+    if (d.stato === 'Incassato' && (!prima || prima.stato !== 'Incassato')) {
       const ok = confirm(messaggioIncasso(d))
       if (!ok) return
     }
@@ -169,7 +179,7 @@ export default function Sponsor() {
       telefono: (d.telefono || '').trim(),
       importo_promesso: d.importo_promesso === '' ? 0 : Number(d.importo_promesso),
       importo_incassato: d.importo_incassato === '' ? 0 : Number(d.importo_incassato),
-      stato: d.stato || 'Prospect',
+      stato: versoFido ? (prima ? prima.stato : 'Confermato') : (d.stato || 'Prospect'),
       data_accordo: d.data_accordo || null,
       data_incasso: d.data_incasso || null,
       note: (d.note || '').trim(),
@@ -181,17 +191,22 @@ export default function Sponsor() {
       payload.data_incasso = (d.id && await dataMovimentoCollegato('Sponsor #' + d.id)) || oggiISO()
     }
 
-    let error
+    let error, salvato
     if (d.id) {
-      ({ error } = await supabase.from('sponsor').update(payload).eq('id', d.id))
+      ({ data: salvato, error } = await supabase.from('sponsor').update(payload).eq('id', d.id).select().single())
     } else {
-      ({ error } = await supabase.from('sponsor').insert({ ...payload, created_by: 'web' }))
+      ({ data: salvato, error } = await supabase.from('sponsor').insert({ ...payload, created_by: 'web' }).select().single())
     }
 
     setSalvando(false)
     if (error) { mostraMsg('errore', error.message); return }
-    mostraMsg('ok', d.id ? 'Sponsor aggiornato.' : 'Sponsor creato.')
     setModal(null)
+    if (versoFido && salvato) {
+      setSceltaFido(salvato)
+      carica()
+      return
+    }
+    mostraMsg('ok', d.id ? 'Sponsor aggiornato.' : 'Sponsor creato.')
     carica()
   }
 
@@ -218,6 +233,7 @@ export default function Sponsor() {
         <p>• <strong>In trattativa</strong> — se ne sta parlando</p>
         <p>• <strong>Confermato</strong> — ha detto sì</p>
         <p>• <strong>Incassato</strong> — ha pagato, l'entrata è in cassa</p>
+        <p>• <strong>Pagato tramite F.I.Do</strong> — ha donato tramite la Fondazione: l'entrata è nella voce F.I.Do</p>
         <p>• <strong>Perso</strong> — non se ne fa nulla</p>
         {puoModificare && (
           <>
@@ -244,6 +260,10 @@ export default function Sponsor() {
         </div>
         <p className="text-xs text-gray-500 mt-2">
           Stessi totali del Rendiconto: contano solo gli sponsor confermati e incassati.
+          {totali.nFido > 0 && (
+            <> Pagati tramite F.I.Do: <strong>{euro(totali.fido)}</strong> da {totali.nFido} sponsor,
+            contati nella voce F.I.Do.</>
+          )}
         </p>
       </div>
 
@@ -278,7 +298,7 @@ export default function Sponsor() {
       {loading ? (
         <div className="text-center text-gray-400 italic py-10">Caricamento...</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-3">
           {COLONNE.map(col => {
             const cards = sponsor.filter(s => (s.stato || 'Prospect') === col.stato)
             const totProm = cards.reduce((sum, c) => sum + (Number(c.importo_promesso) || 0), 0)
@@ -354,6 +374,12 @@ export default function Sponsor() {
             )
           })}
         </div>
+      )}
+
+      {sceltaFido && puoModificare && (
+        <SceltaFido sponsor={sceltaFido}
+                    onChiudi={() => setSceltaFido(null)}
+                    onFatto={testo => { setSceltaFido(null); mostraMsg('ok', testo); carica() }} />
       )}
 
       {modal && puoModificare && (

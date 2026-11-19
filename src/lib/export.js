@@ -111,6 +111,7 @@ export function esportaExcel(dati) {
     { Voce: 'Sponsor incassati', Valore: sp.incassati },
     { Voce: 'Sponsor da incassare', Valore: sp.daIncassare },
     { Voce: 'Sponsor in trattativa (non conteggiati)', Valore: sp.trattativa },
+    { Voce: 'Sponsor pagati tramite F.I.Do (nella voce F.I.Do)', Valore: sp.fido },
   ]
   const wsRiep = XLSX.utils.json_to_sheet(riepilogoRows)
   XLSX.utils.book_append_sheet(wb, wsRiep, 'Riepilogo')
@@ -160,6 +161,7 @@ export function esportaPDF(dati) {
       ['Sponsor incassati', euro(sp.incassati)],
       ['Sponsor da incassare', euro(sp.daIncassare)],
       ['Sponsor in trattativa (non conteggiati)', euro(sp.trattativa)],
+      ['Sponsor pagati tramite F.I.Do (nella voce F.I.Do)', euro(sp.fido)],
     ],
     styles: { fontSize: 9, cellPadding: 2 },
     headStyles: { fillColor: [14, 165, 233], textColor: 255 },

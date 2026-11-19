@@ -1,4 +1,4 @@
-export default function Modal({ titolo, onClose, children, onSave, salvando }) {
+export default function Modal({ titolo, onClose, children, onSave, salvando, etichettaSalva = 'Salva modifiche' }) {
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
@@ -20,7 +20,7 @@ export default function Modal({ titolo, onClose, children, onSave, salvando }) {
           </button>
           <button onClick={onSave} disabled={salvando}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-semibold rounded-lg">
-            {salvando ? 'Salvataggio...' : 'Salva modifiche'}
+            {salvando ? 'Salvataggio...' : etichettaSalva}
           </button>
         </div>
       </div>

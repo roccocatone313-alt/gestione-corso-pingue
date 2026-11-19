@@ -5,6 +5,20 @@ import { euro } from './formato'
 // Sponsor che contano nelle entrate previste
 export const SPONSOR_CONTEGGIATI = ['Confermato', 'Incassato']
 
+// Sponsor che hanno donato tramite F.I.Do: l'entrata è nella voce F.I.Do
+// (categoria F.I.Do del movimento), non in quella Sponsor.
+export const STATO_FIDO = 'Pagato tramite F.I.Do'
+
+// Stati in cui lo sponsor ha pagato e ha un'entrata in cassa
+export const STATI_PAGATI = ['Incassato', STATO_FIDO]
+
+// Tutti gli stati, nell'ordine delle colonne della pagina Sponsor
+export const STATI_SPONSOR = ['Prospect', 'In trattativa', 'Confermato', 'Incassato', STATO_FIDO, 'Perso']
+
+export function pagato(s) {
+  return STATI_PAGATI.includes(s.stato)
+}
+
 function num(v) {
   const n = Number(v)
   return Number.isFinite(n) ? n : 0
@@ -27,7 +41,7 @@ export function importoIncasso(s) {
 
 // Quanto è arrivato da uno sponsor
 export function incassatoDa(s) {
-  return s.stato === 'Incassato' ? importoIncasso(s) : num(s.importo_incassato)
+  return pagato(s) ? importoIncasso(s) : num(s.importo_incassato)
 }
 
 // Quanto manca da incassare: solo per i confermati
@@ -49,14 +63,18 @@ export function riepilogoSponsor(sponsor) {
   const lista = sponsor || []
   const conteggiati = lista.filter(conteggiato)
   const inTrattativa = lista.filter(s => s.stato === 'In trattativa')
+  const viaFido = lista.filter(s => s.stato === STATO_FIDO)
   return {
     attesi: somma(conteggiati, attesoDa),
     incassati: somma(conteggiati, incassatoDa),
     daIncassare: somma(conteggiati, daIncassareDa),
     promessi: somma(conteggiati, s => num(s.importo_promesso)),
     trattativa: somma(inTrattativa, s => num(s.importo_promesso)),
+    // Già contati nella voce F.I.Do: qui solo per mostrarli
+    fido: somma(viaFido, importoIncasso),
     nConteggiati: conteggiati.length,
     nTrattativa: inTrattativa.length,
+    nFido: viaFido.length,
     nProspect: lista.filter(s => s.stato === 'Prospect').length,
   }
 }
@@ -72,4 +90,14 @@ export function messaggioIncasso(s) {
     ? ''
     : " È l'importo promesso: se è arrivata una cifra diversa, correggi l'importo incassato."
   return `${nome} passa a Incassato e in cassa entra ${euro(importo)}.${nota} Confermi?`
+}
+
+// Domanda di conferma quando uno sponsor che ha pagato cambia stato:
+// la sua entrata esce dalla cassa. Null se non c'è niente da chiedere.
+export function messaggioUscitaCassa(s, nuovoStato) {
+  if (!pagato(s) || STATI_PAGATI.includes(nuovoStato)) return null
+  const nome = (s.nome || '').trim() || 'Lo sponsor'
+  const voce = s.stato === STATO_FIDO ? 'F.I.Do' : 'Sponsor'
+  return `${nome} passa a "${nuovoStato}": l'entrata di ${euro(importoIncasso(s))} ` +
+    `(voce ${voce}) viene tolta dalla cassa. Confermi?`
 }
