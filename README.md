@@ -62,6 +62,9 @@ mano (Inserisci → Movimento), altre le crea da solo il database:
 - **Sponsor** in stato *Pagato tramite F.I.Do* → stessa cosa, ma l'entrata va nella categoria **F.I.Do**,
   con il nome dello sponsor. Quando lo sponsor passa a questo stato si sceglie se collegare un'entrata
   F.I.Do già registrata a mano (funzione `collega_entrata_fido`, nessun doppione) o crearne una nuova.
+  Un'entrata collegata tiene il testo scritto a mano (colonna `descrizione_originale`) accanto al nome
+  dello sponsor; se lo sponsor cambia stato o viene eliminato torna un'entrata F.I.Do normale e resta
+  in cassa. Le entrate create in automatico, invece, escono dalla cassa.
 - **Rate di un acquisto** (Admin → Acquisti → **Pagamenti**, oppure l'anticipo in Inserisci) → ogni
   rata è un'uscita, registrata subito.
 - **Acquisto** in stato *Pagato* → uscita del **saldo**, cioè il totale meno le rate già pagate.

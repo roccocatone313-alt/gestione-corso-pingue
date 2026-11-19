@@ -6,9 +6,9 @@ import InfoBox from '../components/InfoBox'
 import { esportaExcel, esportaPDF } from '../lib/export'
 import { euro } from '../lib/formato'
 import { MACRO_SEZIONI } from '../lib/macroSezioni'
-import { dataMovimentoCollegato, oggiISO } from '../lib/dateCassa'
-import { incassatoDa, messaggioIncasso, messaggioUscitaCassa, STATO_FIDO, STATI_PAGATI,
-         STATI_SPONSOR } from '../lib/sponsor'
+import { dataMovimentoCollegato, oggiISO, entrataScrittaAMano } from '../lib/dateCassa'
+import { incassatoDa, messaggioIncasso, messaggioUscitaCassa, messaggioEliminaSponsor, STATO_FIDO,
+         STATI_PAGATI, STATI_SPONSOR, pagato } from '../lib/sponsor'
 import SceltaFido from '../components/SceltaFido'
 
 const TABS = [
@@ -125,9 +125,13 @@ export default function Admin() {
 
   async function elimina(tipo, id) {
     const conRate = tipo === 'acquisti' && pagamenti.some(p => p.acquisto_id === id)
-    const domanda = conRate
+    let domanda = conRate
       ? "Eliminare l'acquisto? Verranno cancellate anche le sue rate e i movimenti di cassa collegati. Operazione irreversibile."
       : 'Eliminare questa voce? Operazione irreversibile.'
+    if (tipo === 'sponsor') {
+      const s = sponsor.find(x => x.id === id) || {}
+      domanda = messaggioEliminaSponsor(s, pagato(s) && await entrataScrittaAMano(id))
+    }
     if (!confirm(domanda)) return
     const { error } = await supabase.from(tipo).delete().eq('id', id)
     if (error) { mostraMsg('errore', error.message); return }
@@ -140,7 +144,8 @@ export default function Admin() {
       const attuale = sponsor.find(x => x.id === id) || {}
       // F.I.Do: prima si sceglie se la donazione è già registrata
       if (valore === STATO_FIDO) { setSceltaFido(attuale); return }
-      const uscita = messaggioUscitaCassa(attuale, valore)
+      const aMano = pagato(attuale) && await entrataScrittaAMano(id)
+      const uscita = messaggioUscitaCassa(attuale, valore, aMano)
       if (uscita && !confirm(uscita)) return
     }
     let messaggioConferma = null
@@ -177,7 +182,8 @@ export default function Admin() {
     const prima = tipo === 'sponsor' ? sponsor.find(x => x.id === id) : null
     const versoFido = tipo === 'sponsor' && dati.stato === STATO_FIDO && prima && prima.stato !== STATO_FIDO
     if (prima && !versoFido) {
-      const uscita = messaggioUscitaCassa(prima, dati.stato)
+      const aMano = pagato(prima) && await entrataScrittaAMano(id)
+      const uscita = messaggioUscitaCassa(prima, dati.stato, aMano)
       if (uscita && !confirm(uscita)) return
       if (dati.stato === 'Incassato' && prima.stato !== 'Incassato' && !confirm(messaggioIncasso(dati))) return
     }

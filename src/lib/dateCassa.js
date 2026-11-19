@@ -18,3 +18,16 @@ export async function dataMovimentoCollegato(riferimento) {
   if (error || !data || data.length === 0) return null
   return data[0].data || null
 }
+
+// True se l'entrata collegata allo sponsor era stata scritta a mano (entrata F.I.Do
+// collegata con "Pagato tramite F.I.Do"): se lo sponsor viene scollegato o eliminato
+// resta in cassa come entrata F.I.Do normale, invece di essere tolta.
+export async function entrataScrittaAMano(sponsorId) {
+  const { data, error } = await supabase
+    .from('movimenti')
+    .select('descrizione_originale')
+    .eq('riferimento', 'Sponsor #' + sponsorId)
+    .limit(1)
+  if (error || !data || data.length === 0) return false
+  return data[0].descrizione_originale !== null && data[0].descrizione_originale !== undefined
+}

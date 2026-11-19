@@ -92,12 +92,30 @@ export function messaggioIncasso(s) {
   return `${nome} passa a Incassato e in cassa entra ${euro(importo)}.${nota} Confermi?`
 }
 
-// Domanda di conferma quando uno sponsor che ha pagato cambia stato:
-// la sua entrata esce dalla cassa. Null se non c'è niente da chiedere.
-export function messaggioUscitaCassa(s, nuovoStato) {
+// Domanda di conferma quando uno sponsor che ha pagato cambia stato.
+// scrittaAMano: l'entrata era un'entrata F.I.Do registrata a mano e poi collegata,
+// quindi resta in cassa senza sponsor; altrimenti esce dalla cassa.
+// Null se non c'è niente da chiedere.
+export function messaggioUscitaCassa(s, nuovoStato, scrittaAMano = false) {
   if (!pagato(s) || STATI_PAGATI.includes(nuovoStato)) return null
   const nome = (s.nome || '').trim() || 'Lo sponsor'
+  if (scrittaAMano) {
+    return `${nome} passa a "${nuovoStato}": l'entrata F.I.Do di ${euro(importoIncasso(s))} ` +
+      `resta in cassa, ma senza sponsor. Confermi?`
+  }
   const voce = s.stato === STATO_FIDO ? 'F.I.Do' : 'Sponsor'
   return `${nome} passa a "${nuovoStato}": l'entrata di ${euro(importoIncasso(s))} ` +
     `(voce ${voce}) viene tolta dalla cassa. Confermi?`
+}
+
+// Domanda di conferma prima di eliminare uno sponsor
+export function messaggioEliminaSponsor(s, scrittaAMano = false) {
+  const nome = (s.nome || '').trim() || 'lo sponsor'
+  if (scrittaAMano) {
+    return `Eliminare ${nome}? La sua entrata F.I.Do di ${euro(importoIncasso(s))} resta in cassa, senza sponsor.`
+  }
+  if (pagato(s)) {
+    return `Eliminare ${nome}? Anche la sua entrata di ${euro(importoIncasso(s))} viene tolta dalla cassa. Operazione irreversibile.`
+  }
+  return `Eliminare ${nome}? Operazione irreversibile.`
 }

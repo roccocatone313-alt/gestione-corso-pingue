@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Modal from '../components/Modal'
 import InfoBox from '../components/InfoBox'
-import { dataMovimentoCollegato, oggiISO } from '../lib/dateCassa'
+import { dataMovimentoCollegato, oggiISO, entrataScrittaAMano } from '../lib/dateCassa'
 import { euro } from '../lib/formato'
 import { useAuth } from '../lib/auth'
-import { riepilogoSponsor, incassatoDa, messaggioIncasso, messaggioUscitaCassa, STATO_FIDO } from '../lib/sponsor'
+import { riepilogoSponsor, incassatoDa, messaggioIncasso, messaggioUscitaCassa, messaggioEliminaSponsor,
+         STATO_FIDO, pagato } from '../lib/sponsor'
 import SceltaFido from '../components/SceltaFido'
 
 const COLONNE = [
@@ -115,7 +116,8 @@ export default function Sponsor() {
     const attuale = sponsor.find(x => x.id === id) || {}
     // F.I.Do: prima si sceglie se la donazione è già registrata
     if (nuovoStato === STATO_FIDO) { setSceltaFido(attuale); return }
-    const uscita = messaggioUscitaCassa(attuale, nuovoStato)
+    const aMano = pagato(attuale) && await entrataScrittaAMano(id)
+    const uscita = messaggioUscitaCassa(attuale, nuovoStato, aMano)
     if (uscita && !confirm(uscita)) return
     if (nuovoStato === 'Incassato') {
       const ok = confirm(messaggioIncasso(attuale))
@@ -162,7 +164,8 @@ export default function Sponsor() {
     // poi si sceglie l'entrata F.I.Do nella finestra apposita.
     const versoFido = d.stato === STATO_FIDO && (!prima || prima.stato !== STATO_FIDO)
     if (prima && !versoFido) {
-      const uscita = messaggioUscitaCassa(prima, d.stato)
+      const aMano = pagato(prima) && await entrataScrittaAMano(prima.id)
+      const uscita = messaggioUscitaCassa(prima, d.stato, aMano)
       if (uscita && !confirm(uscita)) return
     }
     if (d.stato === 'Incassato' && (!prima || prima.stato !== 'Incassato')) {
@@ -212,7 +215,9 @@ export default function Sponsor() {
 
   async function eliminaSponsor() {
     if (!modal || !modal.dati.id) return
-    if (!confirm('Eliminare lo sponsor? Il movimento collegato (se esiste) verrà rimosso.')) return
+    const s = sponsor.find(x => x.id === modal.dati.id) || modal.dati
+    const aMano = pagato(s) && await entrataScrittaAMano(s.id)
+    if (!confirm(messaggioEliminaSponsor(s, aMano))) return
     setSalvando(true)
     const { error } = await supabase.from('sponsor').delete().eq('id', modal.dati.id)
     setSalvando(false)
